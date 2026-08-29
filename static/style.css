@@ -1,4 +1,6 @@
-
+* {
+    box-sizing: border-box;
+}
 
 body {
     font-family: Arial, sans-serif;
@@ -50,10 +52,9 @@ body {
     background-color: #333;
     color: white;
     text-align: center;
-    padding: 10px;
-    position: fixed;
-    bottom: 0;
+    padding: 15px;
     width: 100%;
+    margin-top: 40px;
 }
 
 button {
@@ -70,6 +71,8 @@ button[type="button"] {
 
 table {
     border-collapse: collapse;
+    width: 100%;
+    margin-bottom: 20px;
 }
 
 th {
@@ -89,9 +92,11 @@ form div {
     margin-bottom: 10px;
 }
 
+
 input[type="text"], textarea {
     padding: 8px;
     border: 1px solid #ddd;
+    max-width: 100%;
 }
 
 textarea {

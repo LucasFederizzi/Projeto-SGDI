@@ -9,26 +9,33 @@ body {
     margin: 0;
 }
 
+/* Cabeçalho flexível: distribui os itens e ajusta em telas menores */
 .header {
     background-color: #333;
     color: white;
-    padding: 20px;
+    padding: 15px 20px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 15px;
 }
 
 .header h1 {
     margin: 0;
-    display: inline-block;
 }
 
+/* Menu com alinhamento automático e espaçamento regular */
 .menu {
-    float: right;
-    margin-top: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 15px;
 }
 
 .menu a {
     color: white;
     text-decoration: none;
-    margin-left: 20px;
 }
 
 .menu a:hover {
@@ -39,7 +46,7 @@ body {
     max-width: 1200px;
     margin: 20px auto;
     background: white;
-    padding: 30px;
+    padding: 20px;
 }
 
 .alert {
@@ -75,13 +82,9 @@ table {
     margin-bottom: 20px;
 }
 
-th {
+th, td {
+    padding: 12px;
     text-align: left;
-    padding: 12px;
-}
-
-td {
-    padding: 12px;
 }
 
 table a {
@@ -92,7 +95,6 @@ form div {
     margin-bottom: 10px;
 }
 
-
 input[type="text"], textarea {
     padding: 8px;
     border: 1px solid #ddd;
@@ -101,4 +103,8 @@ input[type="text"], textarea {
 
 textarea {
     resize: vertical;
+}
+
+.table-responsive {
+    overflow-x: auto;
 }

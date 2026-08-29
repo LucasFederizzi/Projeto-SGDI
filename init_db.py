@@ -45,7 +45,7 @@ VALUES (3, 'Melhorar performance', 'Sistema está lento', 'Pedro Costa', '2024-0
 
 cursor.execute("""
 INSERT INTO demandas (id, titulo, descricao, solicitante, data_criacao) 
-VALUES (5, 'Adicionar filtros', 'Usuários querem filtrar demandas', 'Ana Lima', '2024-01-18 11:00:00')
+VALUES (4, 'Adicionar filtros', 'Usuários querem filtrar demandas', 'Ana Lima', '2024-01-18 11:00:00')
 """)
 
 cursor.execute("""
@@ -66,4 +66,4 @@ VALUES (3, 99, 'Este comentário está órfão', 'Usuário', '2024-01-16 10:00:0
 conn.commit()
 conn.close()
 
-print("Banco de dados criado com sucesso com AUTOINCREMENT habilitado!")
+print("Banco de dados criado com sucesso!")

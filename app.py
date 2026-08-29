@@ -14,7 +14,7 @@ def get_db():
 
 @app.route('/')
 def index():
-    conn = sqlite3.connect('demandas.db')
+    conn = get_db()
     cursor = conn.cursor()
     demandas = cursor.execute('SELECT * FROM demandas').fetchall()
     conn.close()
@@ -28,12 +28,12 @@ def nova_demanda():
         descricao = request.form['descricao']
         solicitante = request.form['solicitante']
 
-
-        conn = sqlite3.connect('demandas.db')
+        conn = get_db()
         cursor = conn.cursor()
-
         cursor.execute(
-            f"INSERT INTO demandas (titulo, descricao, solicitante, data_criacao) VALUES ('{titulo}', '{descricao}', '{solicitante}', '{datetime.now()}')")
+            "INSERT INTO demandas (titulo, descricao, solicitante, data_criacao) VALUES (?, ?, ?, ?)",
+            (titulo, descricao, solicitante, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+        )
         conn.commit()
         conn.close()
 
@@ -45,7 +45,7 @@ def nova_demanda():
 
 @app.route('/editar/<id>', methods=['GET', 'POST'])
 def editar(id):
-    conn = sqlite3.connect('demandas.db')
+    conn = get_db()
     cursor = conn.cursor()
 
     if request.method == 'POST':
@@ -54,21 +54,23 @@ def editar(id):
         solicitante = request.form['solicitante']
 
         cursor.execute(
-            f"UPDATE demandas SET titulo='{titulo}', descricao='{descricao}', solicitante='{solicitante}' WHERE id={id}")
+            "UPDATE demandas SET titulo=?, descricao=?, solicitante=? WHERE id=?",
+            (titulo, descricao, solicitante, id)
+        )
         conn.commit()
         conn.close()
         return redirect('/')
 
-    demanda = cursor.execute(f'SELECT * FROM demandas WHERE id={id}').fetchone()
+    demanda = cursor.execute('SELECT * FROM demandas WHERE id=?', (id,)).fetchone()
     conn.close()
     return render_template('editar.html', demanda=demanda)
 
 
 @app.route('/deletar/<id>')
 def deletar(id):
-    conn = sqlite3.connect('demandas.db')
+    conn = get_db()
     cursor = conn.cursor()
-    cursor.execute(f'DELETE FROM demandas WHERE id={id}')
+    cursor.execute('DELETE FROM demandas WHERE id=?', (id,))
     conn.commit()
     conn.close()
     flash('Deletado!')
@@ -77,25 +79,23 @@ def deletar(id):
 
 @app.route('/buscar')
 def buscar():
-    termo = request.args.get('q')
-    conn = sqlite3.connect('demandas.db')
+    termo = request.args.get('q', '')
+    conn = get_db()
     cursor = conn.cursor()
-    resultados = cursor.execute(f"SELECT * FROM demandas WHERE titulo LIKE '%{termo}%'").fetchall()
+    resultados = cursor.execute(
+        "SELECT * FROM demandas WHERE titulo LIKE ?", 
+        (f'%{termo}%',)
+    ).fetchall()
     conn.close()
     return render_template('index.html', demandas=resultados)
 
 
-# @app.route('/admin')
-# def admin():
-#     return 'Área administrativa'
-
 @app.route('/detalhes/<id>')
 def detalhes(id):
-    conn = sqlite3.connect('demandas.db')
+    conn = get_db()
     cursor = conn.cursor()
-    demanda = cursor.execute(f'SELECT * FROM demandas WHERE id={id}').fetchone()
-
-    comentarios = cursor.execute(f'SELECT * FROM comentarios WHERE demanda_id={id}').fetchall()
+    demanda = cursor.execute('SELECT * FROM demandas WHERE id=?', (id,)).fetchone()
+    comentarios = cursor.execute('SELECT * FROM comentarios WHERE demanda_id=?', (id,)).fetchall()
     conn.close()
 
     return render_template('detalhes.html', demanda=demanda, comentarios=comentarios)
@@ -106,10 +106,12 @@ def adicionar_comentario(demanda_id):
     comentario = request.form['comentario']
     autor = request.form['autor']
 
-    conn = sqlite3.connect('demandas.db')
+    conn = get_db()
     cursor = conn.cursor()
     cursor.execute(
-        f"INSERT INTO comentarios (demanda_id, comentario, autor, data) VALUES ({demanda_id}, '{comentario}', '{autor}', '{datetime.now()}')")
+        "INSERT INTO comentarios (demanda_id, comentario, autor, data) VALUES (?, ?, ?, ?)",
+        (demanda_id, comentario, autor, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+    )
     conn.commit()
     conn.close()
 

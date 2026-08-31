@@ -123,7 +123,6 @@ def buscar():
     conn = get_db()
     cursor = conn.cursor()
 
-    # titulo ASC para a pesquisa ficar em ordem alfabetica
     query = """
         SELECT * FROM demandas 
         WHERE titulo LIKE ? 
@@ -141,7 +140,7 @@ def buscar():
                 WHEN LOWER(titulo) LIKE LOWER(?) THEN 2
                 ELSE 3
             END,
-            titulo ASC  
+            titulo ASC
     """
     
     resultados = cursor.execute(
@@ -166,8 +165,14 @@ def detalhes(id):
 
 @app.route('/adicionar_comentario/<demanda_id>', methods=['POST'])
 def adicionar_comentario(demanda_id):
-    comentario = request.form['comentario']
-    autor = request.form['autor']
+    # .strip() remove espaços em branco antes e depois do texto
+    comentario = request.form['comentario'].strip()
+    autor = request.form['autor'].strip()
+
+    # Validação para verificar se os campos estão vazios
+    if not comentario or not autor:
+        flash('O comentário e o autor não podem estar vazios!')
+        return redirect(f'/detalhes/{demanda_id}')
 
     # Validação dos caracteres proibidos
     if caracteres_invalidos(comentario, autor):

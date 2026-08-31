@@ -98,19 +98,33 @@ def deletar(id):
 
 @app.route('/buscar')
 def buscar():
-    termo = request.args.get('q', '')
+    termo = request.args.get('q', '').strip()
 
-    # Validação do termo digitado na busca
     if caracteres_invalidos(termo):
-        flash('A busca não pode conter caracteres especiais')
+        flash('A busca não pode conter os caracteres especiais.')
         return redirect('/')
 
     conn = get_db()
     cursor = conn.cursor()
+
+    # titulo ASC para a pesquisa ficar em ordem alfabetica
+    query = """
+        SELECT * FROM demandas 
+        WHERE titulo LIKE ? 
+        ORDER BY 
+            CASE 
+                WHEN LOWER(titulo) = LOWER(?) THEN 1
+                WHEN LOWER(titulo) LIKE LOWER(?) THEN 2
+                ELSE 3
+            END,
+            titulo ASC   
+    """
+    
     resultados = cursor.execute(
-        "SELECT * FROM demandas WHERE titulo LIKE ?", 
-        (f'%{termo}%',)
+        query, 
+        (f'%{termo}%', termo, f'{termo}%')
     ).fetchall()
+    
     conn.close()
     return render_template('index.html', demandas=resultados)
 

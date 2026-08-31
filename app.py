@@ -1,5 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, flash
 import sqlite3
+import re
+import string
 from datetime import datetime
 
 app = Flask(__name__)
@@ -10,6 +12,13 @@ def get_db():
     conn = sqlite3.connect('demandas.db')
     conn.row_factory = sqlite3.Row
     return conn
+
+
+def caracteres_invalidos(*textos): 
+    for texto in textos:
+        if texto and any(char in string.punctuation for char in texto):
+            return True
+    return False
 
 
 @app.route('/')
@@ -27,6 +36,10 @@ def nova_demanda():
         titulo = request.form['titulo']
         descricao = request.form['descricao']
         solicitante = request.form['solicitante']
+
+        if caracteres_invalidos(titulo, descricao, solicitante):
+            flash('Os campos não podem conter caracteres especiais:')
+            return redirect('/nova_demanda')
 
         conn = get_db()
         cursor = conn.cursor()
@@ -52,6 +65,12 @@ def editar(id):
         titulo = request.form['titulo']
         descricao = request.form['descricao']
         solicitante = request.form['solicitante']
+
+        # Validação dos caracteres proibidos
+        if caracteres_invalidos(titulo, descricao, solicitante):
+            flash('Os campos não podem conter caracteres especiais')
+            conn.close()
+            return redirect(f'/editar/{id}')
 
         cursor.execute(
             "UPDATE demandas SET titulo=?, descricao=?, solicitante=? WHERE id=?",
@@ -80,6 +99,12 @@ def deletar(id):
 @app.route('/buscar')
 def buscar():
     termo = request.args.get('q', '')
+
+    # Validação do termo digitado na busca
+    if caracteres_invalidos(termo):
+        flash('A busca não pode conter caracteres especiais')
+        return redirect('/')
+
     conn = get_db()
     cursor = conn.cursor()
     resultados = cursor.execute(
@@ -105,6 +130,11 @@ def detalhes(id):
 def adicionar_comentario(demanda_id):
     comentario = request.form['comentario']
     autor = request.form['autor']
+
+    # Validação dos caracteres proibidos
+    if caracteres_invalidos(comentario, autor):
+        flash('Os campos não podem conter caracteres especiais')
+        return redirect(f'/detalhes/{demanda_id}')
 
     conn = get_db()
     cursor = conn.cursor()

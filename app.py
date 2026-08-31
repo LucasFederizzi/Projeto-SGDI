@@ -25,7 +25,20 @@ def caracteres_invalidos(*textos):
 def index():
     conn = get_db()
     cursor = conn.cursor()
-    demandas = cursor.execute('SELECT * FROM demandas').fetchall()
+    query = """
+        SELECT * FROM demandas 
+        ORDER BY 
+            CASE prioridade 
+                WHEN 'Urgente' THEN 1 
+                WHEN 'Alta' THEN 2 
+                WHEN 'Média' THEN 3 
+                WHEN 'Baixa' THEN 4 
+                ELSE 5 
+            END,
+            prazo ASC
+    """
+
+    demandas = cursor.execute(query).fetchall()
     conn.close()
     return render_template('index.html', demandas=demandas)
 
@@ -36,16 +49,18 @@ def nova_demanda():
         titulo = request.form['titulo']
         descricao = request.form['descricao']
         solicitante = request.form['solicitante']
+        prioridade = request.form['prioridade']
+        prazo = request.form['prazo']
 
-        if caracteres_invalidos(titulo, descricao, solicitante):
+        if caracteres_invalidos(titulo, descricao, solicitante, prioridade):
             flash('Os campos não podem conter caracteres especiais:')
             return redirect('/nova_demanda')
 
         conn = get_db()
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO demandas (titulo, descricao, solicitante, data_criacao) VALUES (?, ?, ?, ?)",
-            (titulo, descricao, solicitante, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+            "INSERT INTO demandas (titulo, descricao, solicitante, data_criacao, prioridade, prazo) VALUES (?, ?, ?, ?, ?, ?)",
+            (titulo, descricao, solicitante, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), prioridade, prazo)
         )
         conn.commit()
         conn.close()
@@ -65,16 +80,17 @@ def editar(id):
         titulo = request.form['titulo']
         descricao = request.form['descricao']
         solicitante = request.form['solicitante']
+        prioridade = request.form['prioridade']
+        prazo = request.form['prazo']
 
-        # Validação dos caracteres proibidos
-        if caracteres_invalidos(titulo, descricao, solicitante):
+        if caracteres_invalidos(titulo, descricao, solicitante, prioridade):
             flash('Os campos não podem conter caracteres especiais')
             conn.close()
             return redirect(f'/editar/{id}')
 
         cursor.execute(
-            "UPDATE demandas SET titulo=?, descricao=?, solicitante=? WHERE id=?",
-            (titulo, descricao, solicitante, id)
+            "UPDATE demandas SET titulo=?, descricao=?, solicitante=?, prioridade=?, prazo=? WHERE id=?",
+            (titulo, descricao, solicitante, prioridade, prazo, id)
         )
         conn.commit()
         conn.close()
@@ -112,12 +128,20 @@ def buscar():
         SELECT * FROM demandas 
         WHERE titulo LIKE ? 
         ORDER BY 
+            CASE prioridade 
+                WHEN 'Urgente' THEN 1 
+                WHEN 'Alta' THEN 2 
+                WHEN 'Média' THEN 3 
+                WHEN 'Baixa' THEN 4 
+                ELSE 5 
+            END,
+            prazo ASC,
             CASE 
                 WHEN LOWER(titulo) = LOWER(?) THEN 1
                 WHEN LOWER(titulo) LIKE LOWER(?) THEN 2
                 ELSE 3
             END,
-            titulo ASC   
+            titulo ASC  
     """
     
     resultados = cursor.execute(

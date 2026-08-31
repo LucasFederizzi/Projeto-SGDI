@@ -12,7 +12,9 @@ CREATE TABLE demandas (
     titulo TEXT NOT NULL,
     descricao TEXT,
     solicitante TEXT,
-    data_criacao TEXT
+    data_criacao TEXT,
+    prioridade TEXT,
+    prazo TEXT
 )
 ''')
 
@@ -29,23 +31,23 @@ CREATE TABLE comentarios (
 
 
 cursor.execute("""
-INSERT INTO demandas (id, titulo, descricao, solicitante, data_criacao) 
-VALUES (1, 'Corrigir bug no login', 'Usuários não conseguem fazer login', 'João Silva', '2024-01-15 10:30:00')
+INSERT INTO demandas (id, titulo, descricao, solicitante, data_criacao, prioridade, prazo) 
+VALUES (1, 'Corrigir bug no login', 'Usuários não conseguem fazer login', 'João Silva', '2024-01-15 10:30:00', 'Urgente', '2026-08-01')
 """)
 
 cursor.execute("""
-INSERT INTO demandas (id, titulo, descricao, solicitante, data_criacao) 
-VALUES (2, 'Implementar relatório de vendas', 'Precisamos de um relatório mensal', 'Maria Santos', '2024-01-16 14:20:00')
+INSERT INTO demandas (id, titulo, descricao, solicitante, data_criacao, prioridade, prazo) 
+VALUES (2, 'Implementar relatório de vendas', 'Precisamos de um relatório mensal', 'Maria Santos', '2024-01-16 14:20:00', 'Alta', '2026-08-10')
 """)
 
 cursor.execute("""
-INSERT INTO demandas (id, titulo, descricao, solicitante, data_criacao) 
-VALUES (3, 'Melhorar performance', 'Sistema está lento', 'Pedro Costa', '2024-01-17 09:15:00')
+INSERT INTO demandas (id, titulo, descricao, solicitante, data_criacao, prioridade, prazo) 
+VALUES (3, 'Melhorar performance', 'Sistema está lento', 'Pedro Costa', '2024-01-17 09:15:00', 'Média', '2026-08-15')
 """)
 
 cursor.execute("""
-INSERT INTO demandas (id, titulo, descricao, solicitante, data_criacao) 
-VALUES (4, 'Adicionar filtros', 'Usuários querem filtrar demandas', 'Ana Lima', '2024-01-18 11:00:00')
+INSERT INTO demandas (id, titulo, descricao, solicitante, data_criacao, prioridade, prazo) 
+VALUES (4, 'Adicionar filtros', 'Usuários querem filtrar demandas', 'Ana Lima', '2024-01-18 11:00:00', 'Baixa', '2026-08-20')
 """)
 
 cursor.execute("""

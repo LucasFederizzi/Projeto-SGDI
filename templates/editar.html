@@ -28,6 +28,25 @@
         <input type="text" value="{{ demanda[4] }}" disabled>
     </div>
     <br>
+
+    <div>
+        <label>Prioridade:</label><br>
+        <select name="prioridade" required>
+            <!-- No editar.html, você pode usar um if para setar o 'selected' baseado em demanda[5] -->
+            <option value="Baixa">Baixa</option>
+            <option value="Média">Média</option>
+            <option value="Alta">Alta</option>
+            <option value="Urgente">Urgente</option>
+        </select>
+    </div>
+    <br>
+
+    <div>
+        <label>Prazo:</label><br>
+        <!-- type="date" facilita a entrada do usuário e o formato padronizado pro banco -->
+        <input type="date" name="prazo" value="{{ demanda[6] }}" required>
+    </div>
+    <br>
     
     <button type="submit">Atualizar</button>
     <a href="/"><button type="button">Cancelar</button></a>

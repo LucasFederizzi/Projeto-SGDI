@@ -2,17 +2,31 @@ from flask import Flask, render_template, request, redirect, url_for, flash
 import sqlite3
 import re
 import string
-from datetime import datetime
+from datetime import datetime, date
 
 app = Flask(__name__)
 app.secret_key = '123456'
-
 
 def get_db():
     conn = sqlite3.connect('demandas.db')
     conn.row_factory = sqlite3.Row
     return conn
 
+def validar_data_prazo(data_str):
+    if not data_str:
+        return False, "O prazo é obrigatório."
+    
+    try:
+        data_prazo = datetime.strptime(data_str, '%Y-%m-%d').date()
+        data_atual = date.today()
+
+        if data_prazo < data_atual:
+            return False, "O prazo não pode ser uma data no passado."
+        
+        return True, ""
+    
+    except ValueError:
+        return False, "Data inválida."
 
 def caracteres_invalidos(*textos): 
     for texto in textos:
@@ -52,6 +66,12 @@ def nova_demanda():
         prioridade = request.form['prioridade']
         prazo = request.form['prazo']
 
+        # Executa a validação de data
+        prazo_valido, msg_erro_prazo = validar_data_prazo(prazo)
+        if not prazo_valido:
+            flash(msg_erro_prazo)
+            return redirect('/nova_demanda')
+
         if caracteres_invalidos(titulo, descricao, solicitante, prioridade):
             flash('Os campos não podem conter caracteres especiais:')
             return redirect('/nova_demanda')
@@ -69,7 +89,6 @@ def nova_demanda():
         return redirect('/')
 
     return render_template('nova_demanda.html')
-
 
 @app.route('/editar/<id>', methods=['GET', 'POST'])
 def editar(id):

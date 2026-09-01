@@ -1,57 +1,23 @@
 from flask import Flask, render_template, request, redirect, url_for, flash
 import sqlite3
-import re
 import string
-from datetime import datetime, date
+from datetime import datetime
 
 app = Flask(__name__)
 app.secret_key = '123456'
+
 
 def get_db():
     conn = sqlite3.connect('demandas.db')
     conn.row_factory = sqlite3.Row
     return conn
 
-def validar_data_prazo(data_str):
-    if not data_str:
-        return False, "O prazo é obrigatório."
-    
-    try:
-        data_prazo = datetime.strptime(data_str, '%Y-%m-%d').date()
-        data_atual = date.today()
-
-        if data_prazo < data_atual:
-            return False, "O prazo não pode ser uma data no passado."
-        
-        return True, ""
-    
-    except ValueError:
-        return False, "Data inválida."
 
 def caracteres_invalidos(*textos): 
     for texto in textos:
         if texto and any(char in string.punctuation for char in texto):
             return True
     return False
-
-def validar_limites_caracteres(titulo, descricao, solicitante):
-    """Valida os limites máximos de caracteres"""
-    limites = {
-        'titulo': (100, 'Título'),
-        'descricao': (1000, 'Descrição'),
-        'solicitante': (100, 'Solicitante')
-    }
-    
-    if titulo and len(titulo) > limites['titulo'][0]:
-        return False, f"{limites['titulo'][1]} não pode exceder {limites['titulo'][0]} caracteres (você digitou {len(titulo)})"
-    
-    if descricao and len(descricao) > limites['descricao'][0]:
-        return False, f"{limites['descricao'][1]} não pode exceder {limites['descricao'][0]} caracteres (você digitou {len(descricao)})"
-    
-    if solicitante and len(solicitante) > limites['solicitante'][0]:
-        return False, f"{limites['solicitante'][1]} não pode exceder {limites['solicitante'][0]} caracteres (você digitou {len(solicitante)})"
-    
-    return True, ""
 
 
 @app.route('/')
@@ -85,20 +51,9 @@ def nova_demanda():
         prioridade = request.form['prioridade']
         prazo = request.form['prazo']
 
-        # Executa a validação de data
-        prazo_valido, msg_erro_prazo = validar_data_prazo(prazo)
-        if not prazo_valido:
-            flash(msg_erro_prazo)
-            return redirect('/nova_demanda')
-
-        # Valida limites de caracteres
-        limites_ok, msg_erro_limites = validar_limites_caracteres(titulo, descricao, solicitante)
-        if not limites_ok:
-            flash(msg_erro_limites)
-            return redirect('/nova_demanda')
-
-        if caracteres_invalidos(titulo, descricao, solicitante, prioridade):
-            flash('Os campos não podem conter caracteres especiais:')
+        # 'descricao' removida da validação para permitir caracteres especiais
+        if caracteres_invalidos(titulo, solicitante, prioridade):
+            flash('Os campos (exceto descrição) não podem conter caracteres especiais.')
             return redirect('/nova_demanda')
 
         conn = get_db()
@@ -115,6 +70,7 @@ def nova_demanda():
 
     return render_template('nova_demanda.html')
 
+
 @app.route('/editar/<id>', methods=['GET', 'POST'])
 def editar(id):
     conn = get_db()
@@ -127,15 +83,9 @@ def editar(id):
         prioridade = request.form['prioridade']
         prazo = request.form['prazo']
 
-        # Valida limites de caracteres
-        limites_ok, msg_erro_limites = validar_limites_caracteres(titulo, descricao, solicitante)
-        if not limites_ok:
-            flash(msg_erro_limites)
-            conn.close()
-            return redirect(f'/editar/{id}')
-
-        if caracteres_invalidos(titulo, descricao, solicitante, prioridade):
-            flash('Os campos não podem conter caracteres especiais')
+        # 'descricao' removida da validação aqui também
+        if caracteres_invalidos(titulo, solicitante, prioridade):
+            flash('Os campos (exceto descrição) não podem conter caracteres especiais.')
             conn.close()
             return redirect(f'/editar/{id}')
 
@@ -168,7 +118,7 @@ def buscar():
     termo = request.args.get('q', '').strip()
 
     if caracteres_invalidos(termo):
-        flash('A busca não pode conter os caracteres especiais.')
+        flash('A busca não pode conter caracteres especiais.')
         return redirect('/')
 
     conn = get_db()
@@ -216,25 +166,13 @@ def detalhes(id):
 
 @app.route('/adicionar_comentario/<demanda_id>', methods=['POST'])
 def adicionar_comentario(demanda_id):
-    # .strip() remove espaços em branco antes e depois do texto
     comentario = request.form['comentario'].strip()
     autor = request.form['autor'].strip()
-
-    # Validação para verificar se os campos estão vazios
+   
     if not comentario or not autor:
         flash('O comentário e o autor não podem estar vazios!')
         return redirect(f'/detalhes/{demanda_id}')
 
-    # Validação de limites de caracteres para comentários
-    if len(autor) > 100:
-        flash(f'Nome do autor não pode exceder 100 caracteres (você digitou {len(autor)})')
-        return redirect(f'/detalhes/{demanda_id}')
-    
-    if len(comentario) > 1000:
-        flash(f'Comentário não pode exceder 1000 caracteres (você digitou {len(comentario)})')
-        return redirect(f'/detalhes/{demanda_id}')
-
-    # Validação dos caracteres proibidos
     if caracteres_invalidos(comentario, autor):
         flash('Os campos não podem conter caracteres especiais')
         return redirect(f'/detalhes/{demanda_id}')

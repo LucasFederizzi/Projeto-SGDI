@@ -6,19 +6,22 @@
 <form method="POST" action="/nova_demanda">
     <div>
         <label>Título:</label><br>
-        <input type="text" name="titulo" size="50">
+        <input type="text" name="titulo" size="50" maxlength="100" required>
+        <small style="color: #666;">Máximo 100 caracteres</small> <!--Funcional por equanto mas alterar para dentro da caixa de texto-->
     </div>
     <br>
     
     <div>
         <label>Descrição:</label><br>
-        <textarea name="descricao" rows="5" cols="50"></textarea>
+        <textarea name="descricao" rows="5" cols="50" maxlength="1000" required></textarea>
+        <small style="color: #666;">Máximo 1000 caracteres</small> <!--Funcional por equanto mas alterar para dentro da caixa de texto-->
     </div>
     <br>
     
     <div>
         <label>Solicitante:</label><br>
-        <input type="text" name="solicitante">
+        <input type="text" name="solicitante" maxlength="100" required>
+        <small style="color: #666;">Máximo 100 caracteres</small> <!--Funcional por equanto mas alterar para dentro da caixa de texto-->
     </div>
     <br>
 

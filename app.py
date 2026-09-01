@@ -34,6 +34,25 @@ def caracteres_invalidos(*textos):
             return True
     return False
 
+def validar_limites_caracteres(titulo, descricao, solicitante):
+    """Valida os limites máximos de caracteres"""
+    limites = {
+        'titulo': (100, 'Título'),
+        'descricao': (1000, 'Descrição'),
+        'solicitante': (100, 'Solicitante')
+    }
+    
+    if titulo and len(titulo) > limites['titulo'][0]:
+        return False, f"{limites['titulo'][1]} não pode exceder {limites['titulo'][0]} caracteres (você digitou {len(titulo)})"
+    
+    if descricao and len(descricao) > limites['descricao'][0]:
+        return False, f"{limites['descricao'][1]} não pode exceder {limites['descricao'][0]} caracteres (você digitou {len(descricao)})"
+    
+    if solicitante and len(solicitante) > limites['solicitante'][0]:
+        return False, f"{limites['solicitante'][1]} não pode exceder {limites['solicitante'][0]} caracteres (você digitou {len(solicitante)})"
+    
+    return True, ""
+
 
 @app.route('/')
 def index():
@@ -72,6 +91,12 @@ def nova_demanda():
             flash(msg_erro_prazo)
             return redirect('/nova_demanda')
 
+        # Valida limites de caracteres
+        limites_ok, msg_erro_limites = validar_limites_caracteres(titulo, descricao, solicitante)
+        if not limites_ok:
+            flash(msg_erro_limites)
+            return redirect('/nova_demanda')
+
         if caracteres_invalidos(titulo, descricao, solicitante, prioridade):
             flash('Os campos não podem conter caracteres especiais:')
             return redirect('/nova_demanda')
@@ -101,6 +126,13 @@ def editar(id):
         solicitante = request.form['solicitante']
         prioridade = request.form['prioridade']
         prazo = request.form['prazo']
+
+        # Valida limites de caracteres
+        limites_ok, msg_erro_limites = validar_limites_caracteres(titulo, descricao, solicitante)
+        if not limites_ok:
+            flash(msg_erro_limites)
+            conn.close()
+            return redirect(f'/editar/{id}')
 
         if caracteres_invalidos(titulo, descricao, solicitante, prioridade):
             flash('Os campos não podem conter caracteres especiais')
@@ -191,6 +223,15 @@ def adicionar_comentario(demanda_id):
     # Validação para verificar se os campos estão vazios
     if not comentario or not autor:
         flash('O comentário e o autor não podem estar vazios!')
+        return redirect(f'/detalhes/{demanda_id}')
+
+    # Validação de limites de caracteres para comentários
+    if len(autor) > 100:
+        flash(f'Nome do autor não pode exceder 100 caracteres (você digitou {len(autor)})')
+        return redirect(f'/detalhes/{demanda_id}')
+    
+    if len(comentario) > 1000:
+        flash(f'Comentário não pode exceder 1000 caracteres (você digitou {len(comentario)})')
         return redirect(f'/detalhes/{demanda_id}')
 
     # Validação dos caracteres proibidos

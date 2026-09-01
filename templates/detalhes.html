@@ -32,12 +32,14 @@
 <form method="POST" action="/adicionar_comentario/{{ demanda[0] }}">
     <div>
         <label>Seu nome:</label><br>
-        <input type="text" name="autor" size="30">
+        <input type="text" name="autor" size="30" maxlength="100" required>
+        <small style="color: #666;">Máximo 100 caracteres</small> <!--Funcional por equanto mas alterar para dentro da caixa de texto-->
     </div>
     <br>
     <div>
         <label>Comentário:</label><br>
-        <textarea name="comentario" rows="4" cols="50"></textarea>
+        <textarea name="comentario" rows="4" cols="50" maxlength="1000" required></textarea>
+        <small style="color: #666;">Máximo 1000 caracteres</small>
     </div>
     <br>
     <button type="submit">Enviar Comentário</button>

@@ -1,6 +1,16 @@
 {% extends "base.html" %}
 
 {% block content %}
+<style>
+    /* Aplica limite de largura e reticências para textos muito longos */
+    .coluna-titulo {
+        max-width: 220px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+</style>
+
 <div style="display: flex; justify-content: space-between; align-items: center;">
     <h2>Lista de Demandas</h2>
     <p>
@@ -25,7 +35,8 @@
         {% for demanda in demandas %}
         <tr>
             <td>{{ demanda[0] }}</td>
-            <td>{{ demanda[1] }}</td>
+            <!-- Classe adicionada e atributo 'title' para mostrar o texto completo ao passar o mouse -->
+            <td class="coluna-titulo" title="{{ demanda[1] }}">{{ demanda[1] }}</td>
             <td>{{ demanda[3] }}</td>
             <td>{{ demanda[4] }}</td>
             <td>{{ demanda[5] }}</td>

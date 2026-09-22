@@ -3,6 +3,31 @@ import sqlite3
 conn = sqlite3.connect('demandas.db')
 cursor = conn.cursor()
 
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS solicitantes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nome TEXT NOT NULL,
+    email TEXT NOT NULL UNIQUE,
+    senha TEXT NOT NULL
+)
+''')
+
+cursor.execute("SELECT COUNT(*) FROM solicitantes")
+if cursor.fetchone()[0] == 0:
+    solicitantes_iniciais = [
+        ('Juliana Castanho Teixeira', 'juliana@gmail.com', 'juliana'),
+        ('Lucas boeira', 'lucas@gmail.com', 'lucas'),
+        ('Gabriel Techio', 'techio@gmail.com', 'techio'),
+        ('João Silva', 'joãosilva@gmail.com', 'joao'),
+        ('Maria Santos', 'mariasantos@gmail.com', 'maria'),
+        ('Pedro Costa', 'pedrocosta@gmail.com', 'pedro'),
+        ('Ana Lima', 'analima@gmail.com', 'ana')
+    ]
+    cursor.executemany(
+        "INSERT INTO solicitantes (nome, email, senha) VALUES (?, ?, ?)",
+        solicitantes_iniciais
+    )
+
 cursor.execute("DROP TABLE IF EXISTS comentarios")
 cursor.execute("DROP TABLE IF EXISTS demandas")
 
@@ -12,9 +37,11 @@ CREATE TABLE demandas (
     titulo TEXT NOT NULL,
     descricao TEXT,
     solicitante TEXT,
+    solicitante_id INTEGER,
     data_criacao TEXT,
     prioridade TEXT,
-    prazo TEXT
+    prazo TEXT,
+    FOREIGN KEY (solicitante_id) REFERENCES solicitantes (id)
 )
 ''')
 
@@ -31,23 +58,23 @@ CREATE TABLE comentarios (
 
 
 cursor.execute("""
-INSERT INTO demandas (id, titulo, descricao, solicitante, data_criacao, prioridade, prazo) 
-VALUES (1, 'Corrigir bug no login', 'Usuários não conseguem fazer login', 'João Silva', '2024-01-15 10:30:00', 'Urgente', '2026-08-01')
+INSERT INTO demandas (id, titulo, descricao, solicitante, solicitante_id, data_criacao, prioridade, prazo) 
+VALUES (1, 'Corrigir bug no login', 'Usuários não conseguem fazer login', 'João Silva', 4, '2024-01-15 10:30:00', 'Urgente', '2026-08-01')
 """)
 
 cursor.execute("""
-INSERT INTO demandas (id, titulo, descricao, solicitante, data_criacao, prioridade, prazo) 
-VALUES (2, 'Implementar relatório de vendas', 'Precisamos de um relatório mensal', 'Maria Santos', '2024-01-16 14:20:00', 'Alta', '2026-08-10')
+INSERT INTO demandas (id, titulo, descricao, solicitante, solicitante_id, data_criacao, prioridade, prazo) 
+VALUES (2, 'Implementar relatório de vendas', 'Precisamos de um relatório mensal', 'Maria Santos', 5, '2024-01-16 14:20:00', 'Alta', '2026-08-10')
 """)
 
 cursor.execute("""
-INSERT INTO demandas (id, titulo, descricao, solicitante, data_criacao, prioridade, prazo) 
-VALUES (3, 'Melhorar performance', 'Sistema está lento', 'Pedro Costa', '2024-01-17 09:15:00', 'Média', '2026-08-15')
+INSERT INTO demandas (id, titulo, descricao, solicitante, solicitante_id, data_criacao, prioridade, prazo) 
+VALUES (3, 'Melhorar performance', 'Sistema está lento', 'Pedro Costa', 6, '2024-01-17 09:15:00', 'Média', '2026-08-15')
 """)
 
 cursor.execute("""
-INSERT INTO demandas (id, titulo, descricao, solicitante, data_criacao, prioridade, prazo) 
-VALUES (4, 'Adicionar filtros', 'Usuários querem filtrar demandas', 'Ana Lima', '2024-01-18 11:00:00', 'Baixa', '2026-08-20')
+INSERT INTO demandas (id, titulo, descricao, solicitante, solicitante_id, data_criacao, prioridade, prazo) 
+VALUES (4, 'Adicionar filtros', 'Usuários querem filtrar demandas', 'Ana Lima', 7, '2024-01-18 11:00:00', 'Baixa', '2026-08-20')
 """)
 
 cursor.execute("""

@@ -14,7 +14,7 @@
 <div style="display: flex; justify-content: space-between; align-items: center;">
     <h2>Lista de Demandas</h2>
     <p>
-        Usuário conectado: <strong>{{ session['usuario'] }}</strong> 
+        Usuário conectado: <strong>{{ session['usuario'] }} (#{{ session['usuario_id'] }})</strong> 
         | <a href="{{ url_for('logout') }}" style="color: red;">Sair</a>
     </p>
 </div>
@@ -25,6 +25,7 @@
             <th>ID</th>
             <th>Título</th>
             <th>Solicitante</th>
+            <th>ID do Solicitante</th>
             <th>Data</th>
             <th>Prioridade</th>
             <th>Prazo</th>
@@ -38,9 +39,10 @@
             <!-- Classe adicionada e atributo 'title' para mostrar o texto completo ao passar o mouse -->
             <td class="coluna-titulo" title="{{ demanda[1] }}">{{ demanda[1] }}</td>
             <td>{{ demanda[3] }}</td>
-            <td>{{ demanda[4] }}</td>
+            <td>#{{ demanda[4] }}</td>
             <td>{{ demanda[5] }}</td>
             <td>{{ demanda[6] }}</td>
+            <td>{{ demanda[7] }}</td>
             <td>
                 <a href="/detalhes/{{ demanda[0] }}">Ver</a>
                 |

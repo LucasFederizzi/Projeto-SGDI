@@ -82,6 +82,7 @@ def login():
         conn.close()
 
         if usuario:
+            session['usuario_id'] = usuario['id']
             session['email'] = usuario['email']
             session['usuario'] = usuario['nome']  
             return redirect(url_for('index'))
@@ -126,19 +127,20 @@ def nova_demanda():
     if request.method == 'POST':
         titulo = request.form['titulo']
         descricao = request.form['descricao']
-        solicitante = request.form['solicitante']
+        solicitante = session['usuario']
+        solicitante_id = session['usuario_id']
         prioridade = request.form['prioridade']
         prazo = request.form['prazo']
 
-        if caracteres_invalidos(titulo, solicitante, prioridade):
+        if caracteres_invalidos(titulo, prioridade):
             flash('Os campos (exceto descrição) não podem conter caracteres especiais.')
             return redirect('/nova_demanda')
 
         conn = get_db()
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO demandas (titulo, descricao, solicitante, data_criacao, prioridade, prazo) VALUES (?, ?, ?, ?, ?, ?)",
-            (titulo, descricao, solicitante, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), prioridade, prazo)
+            "INSERT INTO demandas (titulo, descricao, solicitante, solicitante_id, data_criacao, prioridade, prazo) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (titulo, descricao, solicitante, solicitante_id, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), prioridade, prazo)
         )
         conn.commit()
         conn.close()
@@ -157,18 +159,17 @@ def editar(id):
     if request.method == 'POST':
         titulo = request.form['titulo']
         descricao = request.form['descricao']
-        solicitante = request.form['solicitante']
         prioridade = request.form['prioridade']
         prazo = request.form['prazo']
 
-        if caracteres_invalidos(titulo, solicitante, prioridade):
+        if caracteres_invalidos(titulo, prioridade):
             flash('Os campos (exceto descrição) não podem conter caracteres especiais.')
             conn.close()
             return redirect(f'/editar/{id}')
 
         cursor.execute(
-            "UPDATE demandas SET titulo=?, descricao=?, solicitante=?, prioridade=?, prazo=? WHERE id=?",
-            (titulo, descricao, solicitante, prioridade, prazo, id)
+            "UPDATE demandas SET titulo=?, descricao=?, prioridade=?, prazo=? WHERE id=?",
+            (titulo, descricao, prioridade, prazo, id)
         )
         conn.commit()
         conn.close()
@@ -193,6 +194,9 @@ def deletar(id):
 @app.route('/buscar')
 def buscar():
     termo = request.args.get('q', '').strip()
+    buscar_por_usuario_id = termo.startswith('#')
+    if termo.startswith('#'):
+        termo = termo[1:].strip()
 
     if caracteres_invalidos(termo):
         flash('A busca não pode conter caracteres especiais.')
@@ -201,10 +205,15 @@ def buscar():
     conn = get_db()
     cursor = conn.cursor()
 
-    query = """
-        SELECT * FROM demandas 
-        WHERE titulo LIKE ? 
-        ORDER BY 
+    filtro = "CAST(solicitante_id AS TEXT) = ?" if buscar_por_usuario_id else """
+        LOWER(titulo) LIKE LOWER(?)
+        OR LOWER(solicitante) LIKE LOWER(?)
+        OR CAST(solicitante_id AS TEXT) LIKE ?
+        OR CAST(id AS TEXT) LIKE ?"""
+    query = f"""
+        SELECT * FROM demandas
+        WHERE {filtro}
+        ORDER BY
             CASE prioridade 
                 WHEN 'Urgente' THEN 1 
                 WHEN 'Alta' THEN 2 
@@ -221,10 +230,10 @@ def buscar():
             titulo ASC
     """
     
-    resultados = cursor.execute(
-        query, 
-        (f'%{termo}%', termo, f'{termo}%')
-    ).fetchall()
+    parametros = (termo, termo, f'{termo}%') if buscar_por_usuario_id else (
+        f'%{termo}%', f'%{termo}%', f'%{termo}%', f'%{termo}%', termo, f'{termo}%'
+    )
+    resultados = cursor.execute(query, parametros).fetchall()
     
     conn.close()
     return render_template('index.html', demandas=resultados)
@@ -244,14 +253,14 @@ def detalhes(id):
 @app.route('/adicionar_comentario/<demanda_id>', methods=['POST'])
 def adicionar_comentario(demanda_id):
     comentario = request.form['comentario'].strip()
-    autor = request.form['autor'].strip()
+    autor = f"{session['usuario']} (#{session['usuario_id']})"
    
-    if not comentario or not autor:
-        flash('O comentário e o autor não podem estar vazios!')
+    if not comentario:
+        flash('O comentário não pode estar vazio!')
         return redirect(f'/detalhes/{demanda_id}')
 
-    if caracteres_invalidos(comentario, autor):
-        flash('Os campos não podem conter caracteres especiais')
+    if caracteres_invalidos(comentario):
+        flash('O comentário não pode conter caracteres especiais')
         return redirect(f'/detalhes/{demanda_id}')
 
     conn = get_db()

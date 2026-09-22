@@ -1,8 +1,13 @@
 {% extends "base.html" %}
 
 {% block content %}
-<h2>Lista de Demandas</h2>
-
+<div style="display: flex; justify-content: space-between; align-items: center;">
+    <h2>Lista de Demandas</h2>
+    <p>
+        Usuário conectado: <strong>{{ session['usuario'] }}</strong> 
+        | <a href="{{ url_for('logout') }}" style="color: red;">Sair</a>
+    </p>
+</div>
 
 <table border="1" cellpadding="10" cellspacing="0" width="100%">
     <thead>
@@ -36,7 +41,6 @@
         {% endfor %}
     </tbody>
 </table>
-
 
 <br><br>
 <a href="/nova_demanda"><button>+ Nova Demanda</button></a>

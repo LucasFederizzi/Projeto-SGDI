@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash
+from flask import Flask, render_template, request, redirect, url_for, flash, session
 import sqlite3
 import string
 from datetime import datetime
@@ -6,6 +6,11 @@ from datetime import datetime
 app = Flask(__name__)
 app.secret_key = '123456'
 
+USUARIOS = {
+    'juliana@gmail.com': {'senha': 'juliana', 'nome': 'Juliana Castanho Teixeira'},
+    'lucas@gmail.com': {'senha': 'lucas', 'nome': 'Lucas boeira'},
+    'techio@gmail.com': {'senha': 'techio', 'nome': 'Gabriel Techio'},
+}
 
 def get_db():
     conn = sqlite3.connect('demandas.db')
@@ -18,6 +23,40 @@ def caracteres_invalidos(*textos):
         if texto and any(char in string.punctuation for char in texto):
             return True
     return False
+
+
+@app.before_request
+def verificar_login():
+    if 'email' not in session and request.endpoint not in ['login', 'logout', 'static']:
+        return redirect(url_for('login'))
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip().lower()
+        senha = request.form.get('senha', '')
+
+        if not email or not senha:
+            flash('Por favor, preencha o e-mail e a senha.')
+            return redirect(url_for('login'))
+
+        if email in USUARIOS and USUARIOS[email]['senha'] == senha:
+            session['email'] = email
+            session['usuario'] = USUARIOS[email]['nome']  
+            return redirect(url_for('index'))
+        else:
+            flash('E-mail ou senha incorretos.')
+            return redirect(url_for('login'))
+
+    return render_template('login.html')
+
+
+@app.route('/logout')
+def logout():
+    session.clear()  
+    flash('Você saiu da sua conta.')
+    return redirect(url_for('login'))
 
 
 @app.route('/')
@@ -51,7 +90,6 @@ def nova_demanda():
         prioridade = request.form['prioridade']
         prazo = request.form['prazo']
 
-        # 'descricao' removida da validação para permitir caracteres especiais
         if caracteres_invalidos(titulo, solicitante, prioridade):
             flash('Os campos (exceto descrição) não podem conter caracteres especiais.')
             return redirect('/nova_demanda')
@@ -83,7 +121,6 @@ def editar(id):
         prioridade = request.form['prioridade']
         prazo = request.form['prazo']
 
-        # 'descricao' removida da validação aqui também
         if caracteres_invalidos(titulo, solicitante, prioridade):
             flash('Os campos (exceto descrição) não podem conter caracteres especiais.')
             conn.close()

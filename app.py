@@ -6,48 +6,10 @@ from datetime import datetime
 app = Flask(__name__)
 app.secret_key = '123456'
 
-
 def get_db():
     conn = sqlite3.connect('demandas.db')
     conn.row_factory = sqlite3.Row
     return conn
-
-
-def init_db():
-    """Cria a tabela de solicitantes no banco e insere os solicitantes iniciais caso esteja vazia."""
-    conn = get_db()
-    cursor = conn.cursor()
-    
-    # Tabela solicitantes com as colunas: id, nome, email, senha
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS solicitantes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nome TEXT NOT NULL,
-            email TEXT NOT NULL UNIQUE,
-            senha TEXT NOT NULL
-        )
-    ''')
-    
-    # Insere os solicitantes se a tabela estiver vazia
-    cursor.execute("SELECT COUNT(*) FROM solicitantes")
-    if cursor.fetchone()[0] == 0:
-        solicitantes_iniciais = [
-            ('Juliana Castanho Teixeira', 'juliana@gmail.com', 'juliana'),
-            ('Lucas boeira', 'lucas@gmail.com', 'lucas'),
-            ('Gabriel Techio', 'techio@gmail.com', 'techio'),
-            ('João Silva', 'joãosilva@gmail.com', 'joao'),
-            ('Maria Santos', 'mariasantos@gmail.com', 'maria'),
-            ('Pedro Costa', 'pedrocosta@gmail.com', 'pedro'),
-            ('Ana Lima', 'analima@gmail.com', 'ana')
-        ]
-        cursor.executemany(
-            "INSERT INTO solicitantes (nome, email, senha) VALUES (?, ?, ?)",
-            solicitantes_iniciais
-        )
-    
-    conn.commit()
-    conn.close()
-
 
 def caracteres_invalidos(*textos): 
     for texto in textos:
@@ -55,8 +17,7 @@ def caracteres_invalidos(*textos):
             return True
     return False
 
-
-@app.before_request
+@app.before_request #Chama a função automaticamente antes de toda requisição
 def verificar_login():
     if 'email' not in session and request.endpoint not in ['login', 'logout', 'static']:
         return redirect(url_for('login'))
@@ -274,11 +235,5 @@ def adicionar_comentario(demanda_id):
 
     return redirect(f'/detalhes/{demanda_id}')
 
-
-def calcular_prazo(data_inicio):
-    return "30 dias"
-
-
 if __name__ == '__main__':
-    init_db()
     app.run(debug=True, host='0.0.0.0')

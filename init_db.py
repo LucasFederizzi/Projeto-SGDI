@@ -3,6 +3,14 @@ import sqlite3
 conn = sqlite3.connect('demandas.db')
 cursor = conn.cursor()
 
+# SE A TABELA JÁ EXISTIR EXCLUI ELA E CRIA UM NOVA PARA NÃO DUPLICAS OS DADOS:
+
+cursor.execute("DROP TABLE IF EXISTS solicitantes")
+cursor.execute("DROP TABLE IF EXISTS comentarios")
+cursor.execute("DROP TABLE IF EXISTS demandas")
+
+# CRIAÇÃO DAS TABELAS:
+
 cursor.execute('''
 CREATE TABLE IF NOT EXISTS solicitantes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -11,25 +19,6 @@ CREATE TABLE IF NOT EXISTS solicitantes (
     senha TEXT NOT NULL
 )
 ''')
-
-cursor.execute("SELECT COUNT(*) FROM solicitantes")
-if cursor.fetchone()[0] == 0:
-    solicitantes_iniciais = [
-        ('Juliana Castanho Teixeira', 'juliana@gmail.com', 'juliana'),
-        ('Lucas boeira', 'lucas@gmail.com', 'lucas'),
-        ('Gabriel Techio', 'techio@gmail.com', 'techio'),
-        ('João Silva', 'joãosilva@gmail.com', 'joao'),
-        ('Maria Santos', 'mariasantos@gmail.com', 'maria'),
-        ('Pedro Costa', 'pedrocosta@gmail.com', 'pedro'),
-        ('Ana Lima', 'analima@gmail.com', 'ana')
-    ]
-    cursor.executemany(
-        "INSERT INTO solicitantes (nome, email, senha) VALUES (?, ?, ?)",
-        solicitantes_iniciais
-    )
-
-cursor.execute("DROP TABLE IF EXISTS comentarios")
-cursor.execute("DROP TABLE IF EXISTS demandas")
 
 cursor.execute('''
 CREATE TABLE demandas (
@@ -55,6 +44,25 @@ CREATE TABLE comentarios (
     FOREIGN KEY (demanda_id) REFERENCES demandas (id)
 )
 ''')
+
+
+# DADOS INSERIDOS:
+
+cursor.execute("SELECT COUNT(*) FROM solicitantes")
+if cursor.fetchone()[0] == 0:
+    solicitantes_iniciais = [
+        ('Juliana Castanho Teixeira', 'juliana@gmail.com', 'juliana'),
+        ('Lucas boeira', 'lucas@gmail.com', 'lucas'),
+        ('Gabriel Techio', 'techio@gmail.com', 'techio'),
+        ('João Silva', 'joãosilva@gmail.com', 'joao'),
+        ('Maria Santos', 'mariasantos@gmail.com', 'maria'),
+        ('Pedro Costa', 'pedrocosta@gmail.com', 'pedro'),
+        ('Ana Lima', 'analima@gmail.com', 'ana')
+    ]
+    cursor.executemany(
+        "INSERT INTO solicitantes (nome, email, senha) VALUES (?, ?, ?)",
+        solicitantes_iniciais
+    )
 
 
 cursor.execute("""

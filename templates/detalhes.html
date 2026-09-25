@@ -3,7 +3,7 @@
 {% block content %}
 <h2>Detalhes da Demanda #{{ demanda[0] }}</h2>
 
-<div style="border:1px solid #ccc; padding:15px; margin-bottom:20px;">
+<div class="detail-box">
     <h3>{{ demanda[1] }}</h3>
     <p><strong>Descrição:</strong></p>
     <p>{{ demanda[2] }}</p>
@@ -23,7 +23,7 @@
 <h3>Comentários</h3>
 
 {% for comentario in comentarios %}
-<div style="background:#f0f0f0; padding:10px; margin:10px 0;">
+<div class="comment-box">
     <p><strong>{{ comentario[3] }}</strong> em {{ comentario[4] }}</p>
     <p>{{ comentario[2] }}</p>
 </div>
@@ -35,7 +35,7 @@
     <div>
         <label>Comentário:</label><br>
         <textarea name="comentario" rows="4" cols="50" maxlength="1000" required></textarea>
-        <small style="color: #666;">Máximo 1000 caracteres</small>
+        <small class="text-muted">Máximo 1000 caracteres</small>
     </div>
     <br>
     <button type="submit">Enviar Comentário</button>

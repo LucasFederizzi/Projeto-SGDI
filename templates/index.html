@@ -1,21 +1,11 @@
 {% extends "base.html" %}
 
 {% block content %}
-<style>
-    /* Aplica limite de largura e reticências para textos muito longos */
-    .coluna-titulo {
-        max-width: 220px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-</style>
-
-<div style="display: flex; justify-content: space-between; align-items: center;">
+<div class="flex-between">
     <h2>Lista de Demandas</h2>
     <p>
         Usuário conectado: <strong>{{ session['usuario'] }} (#{{ session['usuario_id'] }})</strong> 
-        | <a href="{{ url_for('logout') }}" style="color: red;">Sair</a>
+        | <a href="{{ url_for('logout') }}" class="text-danger">Sair</a>
     </p>
 </div>
 
@@ -48,7 +38,7 @@
                 |
                 <a href="/editar/{{ demanda[0] }}">Editar</a>
                 |
-                <a href="/deletar/{{ demanda[0] }}" style="color:red;">Deletar</a>
+                <a href="/deletar/{{ demanda[0] }}" class="text-danger">Deletar</a>
             </td>
         </tr>
         {% endfor %}

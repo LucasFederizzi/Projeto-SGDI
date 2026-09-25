@@ -103,7 +103,7 @@ form div {
     margin-bottom: 10px;
 }
 
-input[type="text"], textarea {
+input[type="text"], input[type="email"], input[type="password"], textarea {
     padding: 8px;
     border: 1px solid #ddd;
     max-width: 100%;
@@ -115,4 +115,80 @@ textarea {
 
 .table-responsive {
     overflow-x: auto;
+}
+
+/* Menu de busca dentro do header (antes era style="display:inline" no base.html) */
+.menu-busca {
+    display: inline;
+}
+
+/* Utilitárias reaproveitadas em várias páginas */
+.flex-between {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.text-danger {
+    color: red;
+}
+
+.text-muted {
+    color: #666;
+}
+
+/* index.html: trunca títulos muito longos na tabela */
+.coluna-titulo {
+    max-width: 220px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* detalhes.html: caixa com os dados da demanda e cada comentário */
+.detail-box {
+    border: 1px solid #ccc;
+    padding: 15px;
+    margin-bottom: 20px;
+}
+
+.comment-box {
+    background: #f0f0f0;
+    padding: 10px;
+    margin: 10px 0;
+}
+
+/* login.html: centraliza o conteúdo do container (só quando essa classe é usada) */
+.container-center {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+/* login.html: cartão central de login */
+.login-card {
+    width: 100%;
+    max-width: 420px;
+}
+
+.login-card h2 {
+    margin-bottom: 6px;
+}
+
+.login-card .subtitle {
+    margin-bottom: 20px;
+}
+
+.login-card .form-group {
+    margin-bottom: 15px;
+}
+
+.login-card label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: bold;
+}
+
+.login-card input {
+    width: 100%;
 }

@@ -3,21 +3,20 @@
 <head>
     <title>SGDI - Sistema de Gestão de Demandas</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <style>
-        body { margin: 0; }
-    </style>
 </head>
 <body>
     <div class="header">
         <h1>SGDI</h1>
+        {% if session.get('email') %}
         <div class="menu">
             <a href="/">Início</a>
             <a href="/nova_demanda">Nova Demanda</a>
-            <form action="/buscar" method="GET" style="display:inline;">
-                <input type="text" name="q" placeholder="Buscar por título, nome ou ID">
+            <form action="/buscar" method="GET" class="menu-busca">
+                <input type="text" name="q" placeholder="Título, nome ou ID">
                 <button type="submit">Buscar</button>
             </form>
         </div>
+        {% endif %}
     </div>
 
     {% with messages = get_flashed_messages() %}
@@ -28,7 +27,7 @@
         {% endif %}
     {% endwith %}
 
-    <div class="container">
+    <div class="container {% block container_class %}{% endblock %}">
         {% block content %}{% endblock %}
     </div>
 

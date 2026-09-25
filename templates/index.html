@@ -1,5 +1,66 @@
 {% extends "base.html" %}
 
+{% block sidebar %}
+<aside class="filtros-sidebar">
+    <form method="GET" action="/">
+        <fieldset>
+            <legend>Buscar</legend>
+
+            <div class="filtro-opcao">
+                <input type="radio" name="tipo_busca" id="tb_id_demanda" value="id_demanda"
+                       {% if tipo_busca == 'id_demanda' %}checked{% endif %}>
+                <label for="tb_id_demanda">ID da Demanda</label>
+            </div>
+            <div class="filtro-opcao">
+                <input type="radio" name="tipo_busca" id="tb_id_solicitante" value="id_solicitante"
+                       {% if tipo_busca == 'id_solicitante' %}checked{% endif %}>
+                <label for="tb_id_solicitante">ID do Solicitante</label>
+            </div>
+            <div class="filtro-opcao">
+                <input type="radio" name="tipo_busca" id="tb_titulo" value="titulo"
+                       {% if tipo_busca == 'titulo' %}checked{% endif %}>
+                <label for="tb_titulo">Título</label>
+            </div>
+            <div class="filtro-opcao">
+                <input type="radio" name="tipo_busca" id="tb_solicitante" value="solicitante"
+                       {% if tipo_busca == 'solicitante' %}checked{% endif %}>
+                <label for="tb_solicitante">Solicitante</label>
+            </div>
+
+            <input type="text" name="termo" value="{{ termo or '' }}" placeholder="Digite o termo da busca">
+        </fieldset>
+
+        <fieldset>
+            <legend>Ordenar por</legend>
+
+            <div class="filtro-opcao">
+                <input type="radio" name="ordenar" id="or_solicitante" value="solicitante"
+                       {% if ordenar == 'solicitante' %}checked{% endif %}>
+                <label for="or_solicitante">Solicitante (A-Z)</label>
+            </div>
+            <div class="filtro-opcao">
+                <input type="radio" name="ordenar" id="or_data" value="data"
+                       {% if ordenar == 'data' %}checked{% endif %}>
+                <label for="or_data">Data de criação</label>
+            </div>
+            <div class="filtro-opcao">
+                <input type="radio" name="ordenar" id="or_prioridade" value="prioridade"
+                       {% if ordenar == 'prioridade' %}checked{% endif %}>
+                <label for="or_prioridade">Prioridade</label>
+            </div>
+            <div class="filtro-opcao">
+                <input type="radio" name="ordenar" id="or_prazo" value="prazo"
+                       {% if ordenar == 'prazo' %}checked{% endif %}>
+                <label for="or_prazo">Prazo</label>
+            </div>
+        </fieldset>
+
+        <button type="submit">Aplicar</button>
+        <a href="/"><button type="button">Limpar</button></a>
+    </form>
+</aside>
+{% endblock %}
+
 {% block content %}
 <div class="flex-between">
     <h2>Lista de Demandas</h2>
@@ -9,43 +70,45 @@
     </p>
 </div>
 
-<table border="1" cellpadding="10" cellspacing="0" width="100%">
-    <thead>
-        <tr bgcolor="#cccccc">
-            <th>ID</th>
-            <th>Título</th>
-            <th>Solicitante</th>
-            <th>ID do Solicitante</th>
-            <th>Data</th>
-            <th>Prioridade</th>
-            <th>Prazo</th>
-            <th>Ações</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for demanda in demandas %}
-        <tr>
-            <td>{{ demanda[0] }}</td>
-            <!-- Classe adicionada e atributo 'title' para mostrar o texto completo ao passar o mouse -->
-            <td class="coluna-titulo" title="{{ demanda[1] }}">{{ demanda[1] }}</td>
-            <td>{{ demanda[3] }}</td>
-            <td>#{{ demanda[4] }}</td>
-            <td>{{ demanda[5] }}</td>
-            <td>{{ demanda[6] }}</td>
-            <td>{{ demanda[7] }}</td>
-            <td>
-                <a href="/detalhes/{{ demanda[0] }}">Ver</a>
-                |
-                <a href="/editar/{{ demanda[0] }}">Editar</a>
-                |
-                <a href="/deletar/{{ demanda[0] }}" class="text-danger">Deletar</a>
-            </td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
+<div class="table-responsive">
+    <table border="1" cellpadding="10" cellspacing="0" width="100%">
+        <thead>
+            <tr bgcolor="#cccccc">
+                <th>ID</th>
+                <th>Título</th>
+                <th>Solicitante</th>
+                <th>ID do Solicitante</th>
+                <th>Data</th>
+                <th>Prioridade</th>
+                <th>Prazo</th>
+                <th>Ações</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for demanda in demandas %}
+            <tr>
+                <td>{{ demanda[0] }}</td>
+                <!-- Classe adicionada e atributo 'title' para mostrar o texto completo ao passar o mouse -->
+                <td class="coluna-titulo" title="{{ demanda[1] }}">{{ demanda[1] }}</td>
+                <td>{{ demanda[3] }}</td>
+                <td>#{{ demanda[4] }}</td>
+                <td>{{ demanda[5] }}</td>
+                <td>{{ demanda[6] }}</td>
+                <td>{{ demanda[7] }}</td>
+                <td>
+                    <a href="/detalhes/{{ demanda[0] }}">Ver</a>
+                    |
+                    <a href="/editar/{{ demanda[0] }}">Editar</a>
+                    |
+                    <a href="/deletar/{{ demanda[0] }}" class="text-danger">Deletar</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
 
-<br><br>
+<br>
 <a href="/nova_demanda"><button>+ Nova Demanda</button></a>
 
 {% endblock %}

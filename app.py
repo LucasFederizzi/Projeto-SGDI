@@ -6,10 +6,12 @@ from datetime import datetime
 app = Flask(__name__)
 app.secret_key = '123456'
 
+
 def get_db():
     conn = sqlite3.connect('demandas.db')
     conn.row_factory = sqlite3.Row
     return conn
+
 
 def caracteres_invalidos(*textos): 
     for texto in textos:
@@ -17,7 +19,7 @@ def caracteres_invalidos(*textos):
             return True
     return False
 
-@app.before_request #Chama a função automaticamente antes de toda requisição
+@app.before_request
 def verificar_login():
     if 'email' not in session and request.endpoint not in ['login', 'logout', 'static']:
         return redirect(url_for('login'))
@@ -61,26 +63,63 @@ def logout():
     return redirect(url_for('login'))
 
 
+ORDENACOES = {
+    'solicitante': "LOWER(solicitante) ASC",
+    'data': "data_criacao DESC",
+    'prioridade': """
+        CASE prioridade 
+            WHEN 'Urgente' THEN 1 
+            WHEN 'Alta' THEN 2 
+            WHEN 'Média' THEN 3 
+            WHEN 'Baixa' THEN 4 
+            ELSE 5 
+        END,
+        prazo ASC
+    """,
+    'prazo': "prazo ASC",
+}
+
+
 @app.route('/')
 def index():
+    tipo_busca = request.args.get('tipo_busca', '')
+    termo = request.args.get('termo', '').strip()
+    ordenar = request.args.get('ordenar', 'prioridade')
+
+    if ordenar not in ORDENACOES:
+        ordenar = 'prioridade'
+
+    condicao = '1=1'
+    parametros = []
+
+    if tipo_busca in ('id_demanda', 'id_solicitante', 'titulo', 'solicitante'):
+        if not termo:
+            flash('Digite um termo para buscar.')
+            tipo_busca = ''
+        elif caracteres_invalidos(termo):
+            flash('A busca não pode conter caracteres especiais.')
+            tipo_busca = ''
+        elif tipo_busca == 'id_demanda':
+            condicao, parametros = "CAST(id AS TEXT) LIKE ?", [f'{termo}%']
+        elif tipo_busca == 'id_solicitante':
+            condicao, parametros = "CAST(solicitante_id AS TEXT) = ?", [termo]
+        elif tipo_busca == 'titulo':
+            condicao, parametros = "LOWER(titulo) LIKE LOWER(?)", [f'%{termo}%']
+        else:  # solicitante (busca por nome)
+            condicao, parametros = "LOWER(solicitante) LIKE LOWER(?)", [f'%{termo}%']
+    else:
+        tipo_busca = ''
+
     conn = get_db()
     cursor = conn.cursor()
-    query = """
-        SELECT * FROM demandas 
-        ORDER BY 
-            CASE prioridade 
-                WHEN 'Urgente' THEN 1 
-                WHEN 'Alta' THEN 2 
-                WHEN 'Média' THEN 3 
-                WHEN 'Baixa' THEN 4 
-                ELSE 5 
-            END,
-            prazo ASC
-    """
-
-    demandas = cursor.execute(query).fetchall()
+    query = f"SELECT * FROM demandas WHERE {condicao} ORDER BY {ORDENACOES[ordenar]}"
+    demandas = cursor.execute(query, parametros).fetchall()
     conn.close()
-    return render_template('index.html', demandas=demandas)
+
+    return render_template(
+        'index.html', demandas=demandas,
+        ordenar=ordenar, tipo_busca=tipo_busca, termo=termo
+    )
 
 
 @app.route('/nova_demanda', methods=['GET', 'POST'])
@@ -150,54 +189,6 @@ def deletar(id):
     conn.close()
     flash('Deletado!')
     return redirect('/')
-
-
-@app.route('/buscar')
-def buscar():
-    termo = request.args.get('q', '').strip()
-    buscar_por_usuario_id = termo.startswith('#')
-    if termo.startswith('#'):
-        termo = termo[1:].strip()
-
-    if caracteres_invalidos(termo):
-        flash('A busca não pode conter caracteres especiais.')
-        return redirect('/')
-
-    conn = get_db()
-    cursor = conn.cursor()
-
-    filtro = "CAST(solicitante_id AS TEXT) = ?" if buscar_por_usuario_id else """
-        LOWER(titulo) LIKE LOWER(?)
-        OR LOWER(solicitante) LIKE LOWER(?)
-        OR CAST(solicitante_id AS TEXT) LIKE ?
-        OR CAST(id AS TEXT) LIKE ?"""
-    query = f"""
-        SELECT * FROM demandas
-        WHERE {filtro}
-        ORDER BY
-            CASE prioridade 
-                WHEN 'Urgente' THEN 1 
-                WHEN 'Alta' THEN 2 
-                WHEN 'Média' THEN 3 
-                WHEN 'Baixa' THEN 4 
-                ELSE 5 
-            END,
-            prazo ASC,
-            CASE 
-                WHEN LOWER(titulo) = LOWER(?) THEN 1
-                WHEN LOWER(titulo) LIKE LOWER(?) THEN 2
-                ELSE 3
-            END,
-            titulo ASC
-    """
-    
-    parametros = (termo, termo, f'{termo}%') if buscar_por_usuario_id else (
-        f'%{termo}%', f'%{termo}%', f'%{termo}%', f'%{termo}%', termo, f'{termo}%'
-    )
-    resultados = cursor.execute(query, parametros).fetchall()
-    
-    conn.close()
-    return render_template('index.html', demandas=resultados)
 
 
 @app.route('/detalhes/<id>')

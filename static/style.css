@@ -46,14 +46,21 @@ body {
     text-decoration: underline;
 }
 
-.container {
+.page-layout {
+    display: flex;
+    gap: 20px;
     max-width: 1200px;
     margin: 20px auto;
+    width: 100%;
+    flex: 1;
+}
+
+.container {
     background: white;
     padding: 20px;
-    /* Faz o container expandir e ocupar o espaço necessário */
     flex: 1;
     width: 100%;
+    min-width: 0;
 }
 
 .alert {
@@ -117,9 +124,50 @@ textarea {
     overflow-x: auto;
 }
 
-/* Menu de busca dentro do header (antes era style="display:inline" no base.html) */
-.menu-busca {
-    display: inline;
+.filtros-sidebar {
+    flex: 0 0 220px;
+    background: #f5f5f5;
+    border: 1px solid #ddd;
+    padding: 15px;
+}
+
+.filtros-sidebar fieldset {
+    border: none;
+    padding: 0;
+    margin: 0 0 20px 0;
+}
+
+.filtros-sidebar legend {
+    font-weight: bold;
+    padding: 0;
+    margin-bottom: 8px;
+}
+
+.filtro-opcao {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.filtro-opcao label {
+    cursor: pointer;
+}
+
+.filtros-sidebar input[type="text"] {
+    width: 100%;
+    margin-top: 8px;
+}
+
+@media (max-width: 768px) {
+    .page-layout {
+        flex-direction: column;
+    }
+
+    .filtros-sidebar {
+        flex: 1 1 auto;
+        width: 100%;
+    }
 }
 
 /* Utilitárias reaproveitadas em várias páginas */

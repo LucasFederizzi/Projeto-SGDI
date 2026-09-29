@@ -85,6 +85,8 @@ def index():
     tipo_busca = request.args.get('tipo_busca', '')
     termo = request.args.get('termo', '').strip()
     ordenar = request.args.get('ordenar', 'prioridade')
+    pagina = max(request.args.get('pagina', 1, type=int) or 1, 1)
+    itens_por_pagina = 10
 
     if ordenar not in ORDENACOES:
         ordenar = 'prioridade'
@@ -112,13 +114,23 @@ def index():
 
     conn = get_db()
     cursor = conn.cursor()
-    query = f"SELECT * FROM demandas WHERE {condicao} ORDER BY {ORDENACOES[ordenar]}"
-    demandas = cursor.execute(query, parametros).fetchall()
+    total_demandas = cursor.execute(
+        f"SELECT COUNT(*) FROM demandas WHERE {condicao}", parametros
+    ).fetchone()[0]
+    total_paginas = max((total_demandas + itens_por_pagina - 1) // itens_por_pagina, 1)
+    pagina = min(pagina, total_paginas)
+    query = (
+        f"SELECT * FROM demandas WHERE {condicao} "
+        f"ORDER BY {ORDENACOES[ordenar]} LIMIT ? OFFSET ?"
+    )
+    parametros_paginacao = parametros + [itens_por_pagina, (pagina - 1) * itens_por_pagina]
+    demandas = cursor.execute(query, parametros_paginacao).fetchall()
     conn.close()
 
     return render_template(
         'index.html', demandas=demandas,
-        ordenar=ordenar, tipo_busca=tipo_busca, termo=termo
+        ordenar=ordenar, tipo_busca=tipo_busca, termo=termo,
+        pagina=pagina, total_paginas=total_paginas, total_demandas=total_demandas
     )
 
 

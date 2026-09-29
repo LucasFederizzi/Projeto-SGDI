@@ -85,6 +85,27 @@ INSERT INTO demandas (id, titulo, descricao, solicitante, solicitante_id, data_c
 VALUES (4, 'Adicionar filtros', 'Usuários querem filtrar demandas', 'Ana Lima', 7, '2024-01-18 11:00:00', 'Baixa', '2026-08-20')
 """)
 
+cursor.executemany(
+    """
+    INSERT INTO demandas
+        (id, titulo, descricao, solicitante, solicitante_id, data_criacao, prioridade, prazo)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """,
+    [
+        (5, 'Atualizar cadastro de clientes', 'Campos do cadastro precisam de revisao', 'Juliana Castanho Teixeira', 1, '2024-01-19 09:30:00', 'Alta', '2026-10-05'),
+        (6, 'Corrigir envio de notificacoes', 'Notificacoes nao chegam para alguns usuarios', 'Lucas boeira', 2, '2024-01-20 10:15:00', 'Urgente', '2026-10-02'),
+        (7, 'Criar painel de indicadores', 'Exibir os principais indicadores da equipe', 'Gabriel Techio', 3, '2024-01-21 13:40:00', 'Média', '2026-10-12'),
+        (8, 'Revisar permissao de acesso', 'Ajustar acesso dos usuarios aos documentos', 'João Silva', 4, '2024-01-22 08:50:00', 'Alta', '2026-10-08'),
+        (9, 'Organizar documentos internos', 'Separar documentos por departamento', 'Maria Santos', 5, '2024-01-23 14:10:00', 'Baixa', '2026-10-20'),
+        (10, 'Corrigir exportacao de dados', 'Arquivo exportado apresenta campos incompletos', 'Pedro Costa', 6, '2024-01-24 11:25:00', 'Urgente', '2026-10-03'),
+        (11, 'Melhorar tela de atendimento', 'Facilitar a consulta dos chamados abertos', 'Ana Lima', 7, '2024-01-25 15:00:00', 'Média', '2026-10-15'),
+        (12, 'Adicionar campo de observacoes', 'Permitir registrar observacoes nas solicitacoes', 'Juliana Castanho Teixeira', 1, '2024-01-26 09:05:00', 'Baixa', '2026-10-22'),
+        (13, 'Ajustar relatorio mensal', 'Incluir totais e filtros no relatorio mensal', 'Lucas boeira', 2, '2024-01-27 16:20:00', 'Alta', '2026-10-09'),
+        (14, 'Corrigir validacao de formulario', 'Formulario aceita dados em formato incorreto', 'Gabriel Techio', 3, '2024-01-28 10:45:00', 'Urgente', '2026-10-04'),
+        (15, 'Atualizar lista de departamentos', 'Incluir os departamentos mais recentes', 'João Silva', 4, '2024-01-29 12:00:00', 'Baixa', '2026-10-25'),
+    ],
+)
+
 cursor.execute("""
 INSERT INTO comentarios (id, demanda_id, comentario, autor, data) 
 VALUES (1, 1, 'Vou investigar esse bug', 'Tech Team', '2024-01-15 11:00:00')

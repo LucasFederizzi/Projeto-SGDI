@@ -108,6 +108,27 @@
     </table>
 </div>
 
+<div class="pagination-summary">
+    <span>{{ total_demandas }} demanda(s)</span>
+    <span>Página {{ pagina }} de {{ total_paginas }}</span>
+</div>
+{% if total_paginas > 1 %}
+<nav class="pagination" aria-label="Paginação das demandas">
+    {% if pagina > 1 %}
+    <a href="{{ url_for('index', pagina=pagina - 1, tipo_busca=tipo_busca, termo=termo, ordenar=ordenar) }}" rel="prev">Anterior</a>
+    <span>Página {{ pagina }} de {{ total_paginas }}</span>
+    {% else %}
+    <span class="pagination-disabled" aria-disabled="true">Anterior</span>
+    {% endif %}
+
+    {% if pagina < total_paginas %}
+    <a href="{{ url_for('index', pagina=pagina + 1, tipo_busca=tipo_busca, termo=termo, ordenar=ordenar) }}" rel="next">Próxima</a>
+    {% else %}
+    <span class="pagination-disabled" aria-disabled="true">Próxima</span>
+    {% endif %}
+</nav>
+{% endif %}
+
 <br>
 <a href="/nova_demanda"><button>+ Nova Demanda</button></a>
 

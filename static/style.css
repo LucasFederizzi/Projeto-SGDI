@@ -124,6 +124,46 @@ textarea {
     overflow-x: auto;
 }
 
+.pagination-summary,
+.pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.pagination-summary {
+    color: #666;
+    font-size: 0.9rem;
+    margin: 8px 0;
+}
+
+.pagination {
+    justify-content: flex-end;
+    margin: 16px 0 24px;
+}
+
+.pagination a,
+.pagination-disabled {
+    padding: 8px 12px;
+    border: 1px solid #ccc;
+    text-decoration: none;
+}
+
+.pagination a {
+    color: #333;
+    background: white;
+}
+
+.pagination a:hover {
+    background: #f0f0f0;
+}
+
+.pagination-disabled {
+    color: #888;
+    background: #eee;
+}
+
 .filtros-sidebar {
     flex: 0 0 220px;
     background: #f5f5f5;

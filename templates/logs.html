@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="flex-between">
+    <h2>Logs de Auditoria</h2>
+    <form method="GET" action="{{ url_for('ver_logs') }}" class="form-inline">
+        <label for="acao">Ação:</label>
+        <select name="acao" id="acao" onchange="this.form.submit()">
+            <option value="">Todas</option>
+            {% for a in acoes %}
+            <option value="{{ a }}" {% if a == acao %}selected{% endif %}>{{ a }}</option>
+            {% endfor %}
+        </select>
+        <noscript><button type="submit">Filtrar</button></noscript>
+    </form>
+</div>
+
+<div class="table-responsive">
+    <table border="1" cellpadding="10" cellspacing="0" width="100%">
+        <thead>
+            <tr bgcolor="#cccccc">
+                <th>ID</th>
+                <th>Data/Hora</th>
+                <th>Usuário</th>
+                <th>Ação</th>
+                <th>Entidade</th>
+                <th>ID Ref.</th>
+                <th>Detalhes</th>
+                <th>IP</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for l in logs %}
+            <tr>
+                <td>{{ l['id'] }}</td>
+                <td>{{ l['data_hora'] }}</td>
+                <td>{{ l['usuario_nome'] or '-' }}{% if l['usuario_id'] %} (#{{ l['usuario_id'] }}){% endif %}</td>
+                <td>{{ l['acao'] }}</td>
+                <td>{{ l['entidade'] }}</td>
+                <td>{{ l['entidade_id'] if l['entidade_id'] is not none else '-' }}</td>
+                <td>{{ l['detalhes'] or '-' }}</td>
+                <td>{{ l['ip'] or '-' }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="8">Nenhum registro encontrado.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="pagination-summary">
+    <span>{{ total }} registro(s)</span>
+    <span>Página {{ pagina }} de {{ total_paginas }}</span>
+</div>
+{% if total_paginas > 1 %}
+<nav class="pagination" aria-label="Paginação dos logs">
+    {% if pagina > 1 %}
+    <a href="{{ url_for('ver_logs', pagina=pagina - 1, acao=acao) }}" rel="prev">Anterior</a>
+    {% else %}
+    <span class="pagination-disabled" aria-disabled="true">Anterior</span>
+    {% endif %}
+
+    {% if pagina < total_paginas %}
+    <a href="{{ url_for('ver_logs', pagina=pagina + 1, acao=acao) }}" rel="next">Próxima</a>
+    {% else %}
+    <span class="pagination-disabled" aria-disabled="true">Próxima</span>
+    {% endif %}
+</nav>
+{% endif %}
+{% endblock %}

@@ -109,7 +109,10 @@
                     |
                     <a href="/editar/{{ demanda[0] }}">Editar</a>
                     |
-                    <a href="/deletar/{{ demanda[0] }}" class="text-danger">Deletar</a>
+                    <form method="POST" action="/deletar/{{ demanda[0] }}" class="form-inline"
+                          onsubmit="return confirm('Tem certeza que deseja deletar esta demanda?');">
+                        <button type="submit" class="btn-link">Deletar</button>
+                    </form>
                 </td>
             </tr>
             {% endfor %}

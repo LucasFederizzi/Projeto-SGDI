@@ -313,3 +313,25 @@ textarea {
 .login-card input {
     width: 100%;
 }
+
+/* Formulário em linha (ex.: botão "Deletar" dentro da tabela, filtro de logs) */
+.form-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+}
+
+/* Botão com aparência de link (ações destrutivas na tabela) */
+.btn-link {
+    background: none;
+    color: red;
+    padding: 0;
+    border: none;
+    cursor: pointer;
+    font: inherit;
+}
+
+.btn-link:hover {
+    text-decoration: underline;
+}

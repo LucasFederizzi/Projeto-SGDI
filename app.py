@@ -6,12 +6,10 @@ from datetime import datetime
 app = Flask(__name__)
 app.secret_key = '123456'
 
-
 def get_db():
     conn = sqlite3.connect('demandas.db')
     conn.row_factory = sqlite3.Row
     return conn
-
 
 def caracteres_invalidos(*textos): 
     for texto in textos:
@@ -120,7 +118,9 @@ def index():
     total_paginas = max((total_demandas + itens_por_pagina - 1) // itens_por_pagina, 1)
     pagina = min(pagina, total_paginas)
     query = (
-        f"SELECT * FROM demandas WHERE {condicao} "
+        f"SELECT *, "
+        f"CASE WHEN status = 'Aberto' AND prazo < date('now') THEN 'Atrasado' ELSE status END AS status_exibido "
+        f"FROM demandas WHERE {condicao} "
         f"ORDER BY {ORDENACOES[ordenar]} LIMIT ? OFFSET ?"
     )
     parametros_paginacao = parametros + [itens_por_pagina, (pagina - 1) * itens_por_pagina]
@@ -207,11 +207,97 @@ def deletar(id):
 def detalhes(id):
     conn = get_db()
     cursor = conn.cursor()
-    demanda = cursor.execute('SELECT * FROM demandas WHERE id=?', (id,)).fetchone()
+    demanda = cursor.execute(
+        "SELECT *, "
+        "CASE WHEN status = 'Aberto' AND prazo < date('now') THEN 'Atrasado' ELSE status END AS status_exibido "
+        "FROM demandas WHERE id=?", (id,)
+    ).fetchone()
     comentarios = cursor.execute('SELECT * FROM comentarios WHERE demanda_id=?', (id,)).fetchall()
     conn.close()
 
     return render_template('detalhes.html', demanda=demanda, comentarios=comentarios)
+
+
+@app.route('/cancelar/<id>', methods=['POST'])
+def cancelar(id):
+    conn = get_db()
+    cursor = conn.cursor()
+    demanda = cursor.execute('SELECT status FROM demandas WHERE id=?', (id,)).fetchone()
+
+    if demanda is None:
+        conn.close()
+        flash('Demanda não encontrada.')
+        return redirect('/')
+
+    if demanda['status'] in ('Concluído', 'Cancelado'):
+        conn.close()
+        flash('Essa demanda já está finalizada e não pode ser cancelada.')
+        return redirect(f'/detalhes/{id}')
+
+    cursor.execute("UPDATE demandas SET status = 'Cancelado' WHERE id = ?", (id,))
+    conn.commit()
+    conn.close()
+    flash('Demanda cancelada.')
+    return redirect(f'/detalhes/{id}')
+
+
+@app.route('/responsavel/<id>', methods=['POST'])
+def assumir_responsabilidade(id):
+    conn = get_db()
+    cursor = conn.cursor()
+    demanda = cursor.execute('SELECT status, responsavel_id FROM demandas WHERE id=?', (id,)).fetchone()
+
+    if demanda is None:
+        conn.close()
+        flash('Demanda não encontrada.')
+        return redirect('/')
+
+    if demanda['status'] in ('Concluído', 'Cancelado'):
+        conn.close()
+        flash('Essa demanda já está finalizada.')
+        return redirect(f'/detalhes/{id}')
+
+    if demanda['responsavel_id'] is not None:
+        conn.close()
+        flash('Essa demanda já tem um responsável.')
+        return redirect(f'/detalhes/{id}')
+
+    cursor.execute(
+        'UPDATE demandas SET responsavel = ?, responsavel_id = ? WHERE id = ?',
+        (session['usuario'], session['usuario_id'], id)
+    )
+    conn.commit()
+    conn.close()
+    flash('Você ficou responsável por essa demanda.')
+    return redirect(f'/detalhes/{id}')
+
+
+@app.route('/concluir/<id>', methods=['POST'])
+def concluir(id):
+    conn = get_db()
+    cursor = conn.cursor()
+    demanda = cursor.execute('SELECT status, responsavel_id FROM demandas WHERE id=?', (id,)).fetchone()
+
+    if demanda is None:
+        conn.close()
+        flash('Demanda não encontrada.')
+        return redirect('/')
+
+    if demanda['status'] in ('Concluído', 'Cancelado'):
+        conn.close()
+        flash('Essa demanda já está finalizada.')
+        return redirect(f'/detalhes/{id}')
+
+    if demanda['responsavel_id'] != session.get('usuario_id'):
+        conn.close()
+        flash('Só o responsável pela demanda pode concluí-la.')
+        return redirect(f'/detalhes/{id}')
+
+    cursor.execute("UPDATE demandas SET status = 'Concluído' WHERE id = ?", (id,))
+    conn.commit()
+    conn.close()
+    flash('Demanda concluída!')
+    return redirect(f'/detalhes/{id}')
 
 
 @app.route('/adicionar_comentario/<demanda_id>', methods=['POST'])

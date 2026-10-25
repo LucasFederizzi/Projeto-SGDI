@@ -14,10 +14,47 @@
 
     <p><strong>Prioridade:</strong> {{ demanda[6] }}</p>
     <p><strong>Prazo:</strong> {{ demanda[7] }}</p>
-    
-    <br>
-    <a href="/editar/{{ demanda[0] }}"><button>Editar</button></a>
-    <a href="/"><button>Voltar</button></a>
+
+    <p>
+        <strong>Status:</strong>
+        <span class="status-badge
+            {%- if demanda['status_exibido'] == 'Aberto' %} status-aberto
+            {%- elif demanda['status_exibido'] == 'Atrasado' %} status-atrasado
+            {%- elif demanda['status_exibido'] == 'Concluído' %} status-concluido
+            {%- elif demanda['status_exibido'] == 'Cancelado' %} status-cancelado
+            {%- endif %}">{{ demanda['status_exibido'] }}</span>
+    </p>
+
+    <p>
+        <strong>Responsável:</strong>
+        {% if demanda['responsavel_id'] %}
+            {{ demanda['responsavel'] }} (#{{ demanda['responsavel_id'] }})
+        {% else %}
+            Nenhum responsável definido
+        {% endif %}
+    </p>
+
+    <div class="acoes-demanda">
+        <a href="/editar/{{ demanda[0] }}"><button>Editar</button></a>
+        <a href="/"><button>Voltar</button></a>
+
+        {% if demanda['status'] == 'Aberto' %}
+            {% if not demanda['responsavel_id'] %}
+            <form method="POST" action="/responsavel/{{ demanda[0] }}">
+                <button type="submit">Ficar Responsável</button>
+            </form>
+            {% elif demanda['responsavel_id'] == session['usuario_id'] %}
+            <form method="POST" action="/concluir/{{ demanda[0] }}">
+                <button type="submit">Concluir</button>
+            </form>
+            {% endif %}
+
+            <form method="POST" action="/cancelar/{{ demanda[0] }}"
+                  onsubmit="return confirm('Tem certeza que deseja cancelar esta demanda?');">
+                <button type="submit" class="btn-cancelar">Cancelar Demanda</button>
+            </form>
+        {% endif %}
+    </div>
 </div>
 
 <h3>Comentários</h3>

@@ -81,6 +81,7 @@
                 <th>Data</th>
                 <th>Prioridade</th>
                 <th>Prazo</th>
+                <th>Status</th>
                 <th>Ações</th>
             </tr>
         </thead>
@@ -95,6 +96,14 @@
                 <td>{{ demanda[5] }}</td>
                 <td>{{ demanda[6] }}</td>
                 <td>{{ demanda[7] }}</td>
+                <td>
+                    <span class="status-badge
+                        {%- if demanda['status_exibido'] == 'Aberto' %} status-aberto
+                        {%- elif demanda['status_exibido'] == 'Atrasado' %} status-atrasado
+                        {%- elif demanda['status_exibido'] == 'Concluído' %} status-concluido
+                        {%- elif demanda['status_exibido'] == 'Cancelado' %} status-cancelado
+                        {%- endif %}">{{ demanda['status_exibido'] }}</span>
+                </td>
                 <td>
                     <a href="/detalhes/{{ demanda[0] }}">Ver</a>
                     |

@@ -246,6 +246,39 @@ textarea {
     margin: 10px 0;
 }
 
+/* Badge de status (index.html e detalhes.html) */
+.status-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 3px;
+    font-size: 0.85rem;
+    font-weight: bold;
+    color: white;
+    white-space: nowrap;
+}
+
+.status-aberto { background-color: #2196F3; }
+.status-atrasado { background-color: #e53935; }
+.status-concluido { background-color: #4CAF50; }
+.status-cancelado { background-color: #808080; }
+
+/* detalhes.html: agrupa os botões de ação (editar/voltar/responsável/concluir/cancelar) */
+.acoes-demanda {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 15px;
+}
+
+.acoes-demanda form {
+    margin: 0;
+}
+
+.btn-cancelar {
+    background-color: #e53935;
+}
+
 /* login.html: centraliza o conteúdo do container (só quando essa classe é usada) */
 .container-center {
     display: flex;

@@ -30,7 +30,12 @@ CREATE TABLE demandas (
     data_criacao TEXT,
     prioridade TEXT,
     prazo TEXT,
-    FOREIGN KEY (solicitante_id) REFERENCES solicitantes (id)
+    status TEXT NOT NULL DEFAULT 'Aberto',
+    responsavel TEXT,
+    responsavel_id INTEGER,
+    data_conclusao TEXT,
+    FOREIGN KEY (solicitante_id) REFERENCES solicitantes (id),
+    FOREIGN KEY (responsavel_id) REFERENCES solicitantes (id)
 )
 ''')
 
@@ -105,6 +110,15 @@ cursor.executemany(
         (15, 'Atualizar lista de departamentos', 'Incluir os departamentos mais recentes', 'João Silva', 4, '2024-01-29 12:00:00', 'Baixa', '2026-10-25'),
     ],
 )
+
+# Exemplos de status diferentes, só pra já demonstrar a feature com dados de teste
+# (as demais demandas ficam no padrão 'Aberto' - algumas delas já aparecem como
+# "Atrasado" automaticamente, já que o prazo calculado é comparado com a data de hoje)
+cursor.execute(
+    "UPDATE demandas SET status = 'Concluído', responsavel = ?, responsavel_id = ? WHERE id = 1",
+    ('João Silva', 4)
+)
+cursor.execute("UPDATE demandas SET status = 'Cancelado' WHERE id = 9")
 
 cursor.execute("""
 INSERT INTO comentarios (id, demanda_id, comentario, autor, data) 

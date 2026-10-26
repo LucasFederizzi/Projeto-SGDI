@@ -1,0 +1,288 @@
+{% extends "base.html" %}
+
+{% block sidebar %}
+<!-- FILTROS (todos combinados; a tela atualiza sozinha ao mudar qualquer campo) -->
+<aside class="filtros-sidebar">
+    <form id="form-filtros" onsubmit="return false;">
+        <fieldset>
+            <legend>Visão</legend>
+            <div class="filtro-opcao">
+                <input type="radio" id="visao-geral" name="visao" value=""
+                       {% if filtros.visao == '' %}checked{% endif %}>
+                <label for="visao-geral">Geral</label>
+            </div>
+            <div class="filtro-opcao">
+                <input type="radio" id="visao-crit" name="visao" value="criticas_atrasadas"
+                       {% if filtros.visao == 'criticas_atrasadas' %}checked{% endif %}>
+                <label for="visao-crit">Críticas + atrasadas</label>
+            </div>
+        </fieldset>
+
+        <fieldset>
+            <legend>Período (criação)</legend>
+            <label class="rotulo" for="data_inicio">De</label>
+            <input type="date" id="data_inicio" name="data_inicio" value="{{ filtros.data_inicio }}">
+            <label class="rotulo" for="data_fim">Até</label>
+            <input type="date" id="data_fim" name="data_fim" value="{{ filtros.data_fim }}">
+        </fieldset>
+
+        <fieldset>
+            <legend>Responsável</legend>
+            <select name="responsavel">
+                <option value="">Todos</option>
+                <option value="sem" {% if filtros.responsavel == 'sem' %}selected{% endif %}>Sem responsável</option>
+                {% for r in responsaveis %}
+                <option value="{{ r['id'] }}" {% if filtros.responsavel == r['id']|string %}selected{% endif %}>{{ r['nome'] }}</option>
+                {% endfor %}
+            </select>
+        </fieldset>
+
+        <fieldset>
+            <legend>Prioridade</legend>
+            <select name="prioridade">
+                <option value="">Todas</option>
+                {% for p in prioridades %}
+                <option value="{{ p }}" {% if filtros.prioridade == p %}selected{% endif %}>{{ p }}</option>
+                {% endfor %}
+            </select>
+        </fieldset>
+
+        <fieldset>
+            <legend>Status</legend>
+            <select name="status">
+                <option value="">Todos</option>
+                {% for s in status_lista %}
+                <option value="{{ s }}" {% if filtros.status == s %}selected{% endif %}>{{ s }}</option>
+                {% endfor %}
+            </select>
+        </fieldset>
+
+        <a class="btn-link-padrao btn-secundario" href="/dashboard">Limpar filtros</a>
+    </form>
+</aside>
+{% endblock %}
+
+{% block content %}
+<div class="dash-topo">
+    <div>
+        <h2>Dashboard</h2>
+        <div class="text-muted" id="filtros-texto">Carregando...</div>
+    </div>
+    <div class="dash-acoes">
+        <a class="btn-link-padrao" id="link-csv" href="/dashboard/exportar">Exportar Excel (CSV)</a>
+        <a class="btn-link-padrao btn-secundario" id="link-pdf" href="/dashboard/relatorio" target="_blank">Imprimir / PDF</a>
+    </div>
+</div>
+
+<div id="erro" class="alert" style="display:none;"></div>
+
+<!-- DESTAQUE: críticas atrasadas -->
+<div class="destaque-critico" id="destaque">
+    <h3>Críticas atrasadas <span id="destaque-qtd"></span></h3>
+    
+    <div class="table-responsive" id="destaque-conteudo"></div>
+</div>
+
+<!-- KPIs -->
+<div class="kpi-grid" id="kpis"></div>
+
+<!-- GRÁFICOS -->
+<div class="dash-grafico-grid">
+    <div class="dash-card">
+        <h3>Demandas por status</h3>
+        <canvas id="g-status"></canvas>
+    </div>
+    <div class="dash-card">
+        <h3>Demandas por prioridade</h3>
+        <canvas id="g-prioridade"></canvas>
+    </div>
+    <div class="dash-card dash-card-largo">
+        <h3>Evolução temporal: criadas x concluídas</h3>
+        <canvas id="g-evolucao"></canvas>
+    </div>
+</div>
+
+<!-- POR RESPONSÁVEL -->
+<div class="dash-card" style="margin-bottom:20px;">
+    <h3>Demandas em aberto por responsável</h3>
+   
+    <div class="table-responsive" id="tabela-responsavel"></div>
+</div>
+
+<!-- TODAS AS CRÍTICAS -->
+<div class="dash-card">
+    <h3>Demandas críticas (<span id="criticas-qtd">0</span>)</h3>
+    <div class="table-responsive" id="tabela-criticas"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+const form = document.getElementById('form-filtros');
+const graficos = {};
+
+const COR_STATUS = {'Aberto': '#2196F3', 'Atrasado': '#e53935', 'Concluído': '#4CAF50', 'Cancelado': '#808080'};
+const COR_PRIORIDADE = {'Urgente': '#e53935', 'Alta': '#FF9800', 'Média': '#FFC107', 'Baixa': '#4CAF50'};
+
+function esc(valor) {
+    const d = document.createElement('div');
+    d.textContent = valor == null ? '' : valor;
+    return d.innerHTML;
+}
+
+function slug(texto) {
+    return texto.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+}
+
+function badge(status) {
+    return '<span class="status-badge status-' + slug(status) + '">' + esc(status) + '</span>';
+}
+
+function dataBR(iso) {
+    if (!iso) return '';
+    const p = iso.split('-');
+    return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : iso;
+}
+
+function consulta() {
+    return new URLSearchParams(new FormData(form)).toString();
+}
+
+function kpi(classe, titulo, valor, detalhe) {
+    return '<div class="kpi ' + classe + '"><div class="kpi-titulo">' + titulo + '</div>' +
+           '<div class="kpi-valor">' + valor + '</div>' +
+           '<div class="kpi-detalhe">' + (detalhe || '&nbsp;') + '</div></div>';
+}
+
+function tabelaCriticas(lista, comStatus) {
+    if (!lista.length) return '';
+    let html = '<table><thead><tr><th>ID</th><th>Título</th><th>Solicitante</th><th>Responsável</th><th>Prazo</th>' +
+               (comStatus ? '<th>Status</th>' : '') + '</tr></thead><tbody>';
+    lista.forEach(function (c) {
+        const atrasada = c.status_exibido === 'Atrasado';
+        html += '<tr class="' + (atrasada ? 'linha-atrasada' : '') + '">' +
+            '<td>#' + c.id + '</td>' +
+            '<td><a href="/detalhes/' + c.id + '">' + esc(c.titulo) + '</a></td>' +
+            '<td>' + esc(c.solicitante) + '</td>' +
+            '<td>' + (c.responsavel ? esc(c.responsavel) : '<span class="text-muted">Sem responsável</span>') + '</td>' +
+            '<td>' + dataBR(c.prazo) + '</td>' +
+            (comStatus ? '<td>' + badge(c.status_exibido) + '</td>' : '') +
+            '</tr>';
+    });
+    return html + '</tbody></table>';
+}
+
+function desenhar(id, config) {
+    if (typeof Chart === 'undefined') {
+        const el = document.getElementById(id);
+        if (el) el.outerHTML =
+            '<div class="dash-aviso">Gráfico indisponível (biblioteca Chart.js não carregou - verifique a internet).</div>';
+        return;
+    }
+    if (graficos[id]) graficos[id].destroy();
+    graficos[id] = new Chart(document.getElementById(id), config);
+}
+
+function pct(n) {
+    return n.toString().replace('.', ',') + '% do total';
+}
+
+function render(d) {
+    document.getElementById('filtros-texto').textContent = 'Filtros: ' + d.filtros_texto;
+
+    // KPIs
+    const s = d.status, t = d.tempo_medio;
+    const textoTempo = t.dias === null ? '-' : t.dias.toString().replace('.', ',') + ' dias';
+    const detalheTempo = t.dias === null ? 'Sem concluídas com responsável' :
+        t.consideradas + ' concluída(s) · críticas peso ' + t.peso_critica +
+        (t.fora_sla ? ' · ' + t.fora_sla + ' sem responsável fora' : '');
+    document.getElementById('kpis').innerHTML =
+        kpi('kpi-total', 'Total de demandas', d.total, '&nbsp;') +
+        kpi('kpi-aberto', 'Abertas (no prazo)', s['Aberto'].n, pct(s['Aberto'].pct)) +
+        kpi('kpi-atrasado', 'Atrasadas', s['Atrasado'].n, pct(s['Atrasado'].pct)) +
+        kpi('kpi-concluido', 'Concluídas', s['Concluído'].n, pct(s['Concluído'].pct)) +
+        kpi('kpi-cancelado', 'Canceladas', s['Cancelado'].n, pct(s['Cancelado'].pct)) +
+        kpi('kpi-semresp', 'Abertas sem responsável', d.sem_responsavel, 'Fora do SLA') +
+        kpi('kpi-tempo', 'Tempo médio de resolução', textoTempo, detalheTempo);
+
+    // Destaque: críticas atrasadas
+    const ca = d.criticas_atrasadas;
+    document.getElementById('destaque-qtd').textContent = '(' + ca.length + ')';
+    document.getElementById('destaque-conteudo').innerHTML = ca.length ?
+        tabelaCriticas(ca, false) : '<p class="vazio">Nenhuma demanda crítica atrasada com os filtros atuais.</p>';
+
+    // Gráfico de status
+    const nomesStatus = Object.keys(s);
+    desenhar('g-status', {
+        type: 'doughnut',
+        data: {labels: nomesStatus, datasets: [{
+            data: nomesStatus.map(function (k) { return s[k].n; }),
+            backgroundColor: nomesStatus.map(function (k) { return COR_STATUS[k]; })
+        }]},
+        options: {plugins: {legend: {position: 'bottom'}}}
+    });
+
+    // Gráfico de prioridade
+    const nomesPrio = Object.keys(d.prioridade);
+    desenhar('g-prioridade', {
+        type: 'bar',
+        data: {labels: nomesPrio, datasets: [{
+            label: 'Demandas',
+            data: nomesPrio.map(function (k) { return d.prioridade[k]; }),
+            backgroundColor: nomesPrio.map(function (k) { return COR_PRIORIDADE[k]; })
+        }]},
+        options: {plugins: {legend: {display: false}}, scales: {y: {beginAtZero: true, ticks: {precision: 0}}}}
+    });
+
+    // Evolução temporal
+    desenhar('g-evolucao', {
+        type: 'line',
+        data: {labels: d.evolucao.labels, datasets: [
+            {label: 'Criadas', data: d.evolucao.criadas, borderColor: '#2196F3', backgroundColor: '#2196F3', tension: 0.2},
+            {label: 'Concluídas', data: d.evolucao.concluidas, borderColor: '#4CAF50', backgroundColor: '#4CAF50', tension: 0.2}
+        ]},
+        options: {plugins: {legend: {position: 'bottom'}}, scales: {y: {beginAtZero: true, ticks: {precision: 0}}}}
+    });
+
+    // Por responsável
+    let htmlResp = '<p class="text-muted">Nenhuma demanda em aberto.</p>';
+    if (d.por_responsavel.length) {
+        htmlResp = '<table><thead><tr><th>Responsável</th><th>Em aberto</th><th>Atrasadas</th></tr></thead><tbody>';
+        d.por_responsavel.forEach(function (r) {
+            htmlResp += '<tr class="' + (r.atrasadas > 0 ? 'linha-atrasada' : '') + '"><td>' + esc(r.nome) +
+                (r.sem_responsavel ? ' <span class="text-muted">(fora do SLA)</span>' : '') +
+                '</td><td>' + r.abertas + '</td><td>' + r.atrasadas + '</td></tr>';
+        });
+        htmlResp += '</tbody></table>';
+    }
+    document.getElementById('tabela-responsavel').innerHTML = htmlResp;
+
+    // Todas as críticas
+    document.getElementById('criticas-qtd').textContent = d.criticas.length;
+    document.getElementById('tabela-criticas').innerHTML =
+        d.criticas.length ? tabelaCriticas(d.criticas, true) : '<p class="text-muted">Nenhuma demanda crítica.</p>';
+}
+
+let requisicao = 0;
+async function carregar() {
+    const q = consulta();
+    const minha = ++requisicao;
+    history.replaceState(null, '', '?' + q);
+    document.getElementById('link-csv').href = '/dashboard/exportar?' + q;
+    document.getElementById('link-pdf').href = '/dashboard/relatorio?' + q;
+    const erro = document.getElementById('erro');
+    try {
+        const resp = await fetch('/dashboard/dados?' + q, {headers: {'Accept': 'application/json'}});
+        const dados = await resp.json();
+        if (minha !== requisicao) return;  // chegou uma consulta mais nova
+        erro.style.display = 'none';
+        render(dados);
+    } catch (e) {
+        erro.textContent = 'Não foi possível carregar os dados. Recarregue a página (sua sessão pode ter expirado).';
+        erro.style.display = 'block';
+    }
+}
+
+form.addEventListener('change', carregar);
+carregar();
+</script>
+{% endblock %}

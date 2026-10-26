@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Relatório de demandas</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<div class="header">
+    <h1>SGDI</h1>
+    <div class="menu"><a href="/dashboard">Voltar ao dashboard</a></div>
+</div>
+
+<div class="relatorio">
+
+    <div class="no-print" style="margin-bottom: 15px;">
+        <button type="button" onclick="window.print()" style="background-color:#4CAF50;">Imprimir / Salvar como PDF</button>
+        <span class="text-muted">Na janela de impressão, escolha "Salvar como PDF".</span>
+    </div>
+
+    <div class="relatorio-cab">
+        <h1>{{ empresa }}</h1>
+        <div>Relatório de demandas · Gerado em {{ gerado_em }}</div>
+    </div>
+
+    <div class="relatorio-resumo">
+        <div><strong>Total:</strong> {{ dados.total }}</div>
+        <div><strong>Abertas:</strong> {{ dados.status['Aberto'].n }}</div>
+        <div><strong>Atrasadas:</strong> {{ dados.status['Atrasado'].n }}</div>
+        <div><strong>Concluídas:</strong> {{ dados.status['Concluído'].n }}</div>
+        <div><strong>Canceladas:</strong> {{ dados.status['Cancelado'].n }}</div>
+        <div><strong>Tempo médio:</strong>
+            {% if dados.tempo_medio.dias is none %}-{% else %}{{ dados.tempo_medio.dias|string|replace('.', ',') }} dias{% endif %}
+        </div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th><th>Título</th><th>Solicitante</th><th>Responsável</th>
+                <th>Prioridade</th><th>Prazo</th><th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for l in linhas %}
+            <tr class="{{ 'linha-atrasada' if l['status_exibido'] == 'Atrasado' else '' }}">
+                <td>#{{ l['id'] }}</td>
+                <td>{{ l['titulo'] }}</td>
+                <td>{{ l['solicitante'] }}</td>
+                <td>{{ l['responsavel'] }}</td>
+                <td>{{ l['prioridade'] }}</td>
+                <td>{{ l['prazo'] }}</td>
+                <td>{{ l['status_exibido'] }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7" class="text-muted">Nenhuma demanda para os filtros selecionados.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="relatorio-rodape">
+        Relatório gerado com: {{ dados.filtros_texto }} · {{ linhas|length }} demanda(s) · {{ gerado_em }}
+    </div>
+</div>
+
+</body>
+</html>

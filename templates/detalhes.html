@@ -35,10 +35,12 @@
     </p>
 
     <div class="acoes-demanda">
+        {% if pode('editar_demanda') %}
         <a href="/editar/{{ demanda[0] }}"><button>Editar</button></a>
+        {% endif %}
         <a href="/"><button>Voltar</button></a>
 
-        {% if demanda['status'] == 'Aberto' %}
+        {% if pode('alterar_status') and demanda['status'] == 'Aberto' %}
             {% if not demanda['responsavel_id'] %}
             <form method="POST" action="/responsavel/{{ demanda[0] }}">
                 <button type="submit">Ficar Responsável</button>
@@ -66,6 +68,7 @@
 </div>
 {% endfor %}
 
+{% if pode('comentar') %}
 <h4>Adicionar Comentário</h4>
 <p>Comentando como: <strong>{{ session['usuario'] }} (#{{ session['usuario_id'] }})</strong></p>
 <form method="POST" action="/adicionar_comentario/{{ demanda[0] }}">
@@ -77,5 +80,6 @@
     <br>
     <button type="submit">Enviar Comentário</button>
 </form>
+{% endif %}
 
 {% endblock %}

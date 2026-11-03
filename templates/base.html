@@ -10,8 +10,8 @@
         {% if session.get('email') %}
         <div class="menu">
             <a href="/">Início</a>
-            <a href="/dashboard">Dashboard</a>
-            <a href="/logs">Logs</a>
+            {% if pode('ver_painel') %}<a href="/dashboard">Dashboard</a>{% endif %}
+            {% if pode('ver_logs') %}<a href="/logs">Logs</a>{% endif %}
         </div>
         {% endif %}
     </div>

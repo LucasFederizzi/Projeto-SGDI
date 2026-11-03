@@ -4,6 +4,7 @@ import os
 import sqlite3
 import string
 from datetime import datetime
+from functools import wraps
 
 from flask import (Flask, render_template, request, redirect, url_for, flash,
                    session, jsonify, Response)
@@ -21,7 +22,30 @@ ACOES_LOG = (
     'CRIAR_DEMANDA', 'EDITAR_DEMANDA', 'EXCLUIR_DEMANDA',
     'ASSUMIR_RESPONSABILIDADE', 'CONCLUIR_DEMANDA', 'CANCELAR_DEMANDA',
     'CRIAR_COMENTARIO', 'INICIALIZAR_BANCO', 'EXPORTAR_RELATORIO',
+    'ACESSO_NEGADO',
 )
+
+# ---- Perfis e permissões ----
+# O perfil de cada pessoa fica na coluna solicitantes.perfil. No login o e-mail
+# identifica a conta e a conta define o perfil. Para criar um perfil novo
+# (ex.: 'gestor') basta adicionar uma entrada em PERMISSOES_POR_PERFIL e em
+# ROTULOS_PERFIL; para uma permissão nova, adicione o nome aqui e proteja a
+# rota com @requer_permissao('nome') (e os botões com {% if pode('nome') %}).
+PERFIL_USUARIO = 'usuario'
+PERFIL_ADMIN = 'admin'
+
+PERMISSOES_POR_PERFIL = {
+    PERFIL_USUARIO: {
+        'visualizar', 'criar_demanda', 'comentar',
+    },
+    PERFIL_ADMIN: {
+        'visualizar', 'criar_demanda', 'comentar',
+        'editar_demanda', 'excluir_demanda', 'alterar_status',
+        'ver_logs', 'ver_painel',
+    },
+}
+
+ROTULOS_PERFIL = {PERFIL_USUARIO: 'Usuário', PERFIL_ADMIN: 'Administrador'}
 
 # ---- Dashboard gerencial ----
 NOME_EMPRESA = os.environ.get('NOME_EMPRESA', 'SGDI - Sistema de Gestão de Demandas')
@@ -81,6 +105,48 @@ def registrar_log(cursor, acao, entidade, entidade_id, detalhes=None,
     )
 
 
+def perfil_atual():
+    """Perfil da sessão. Perfil ausente ou desconhecido = o de menos privilégios."""
+    perfil = session.get('perfil')
+    return perfil if perfil in PERMISSOES_POR_PERFIL else PERFIL_USUARIO
+
+
+def pode(permissao):
+    return permissao in PERMISSOES_POR_PERFIL[perfil_atual()]
+
+
+def requer_permissao(permissao, resposta_json=False):
+    """Bloqueia a rota (no servidor) para quem não tem a permissão e registra no log."""
+    def decorador(funcao):
+        @wraps(funcao)
+        def interna(*args, **kwargs):
+            if pode(permissao):
+                return funcao(*args, **kwargs)
+
+            conn = get_db()
+            cursor = conn.cursor()
+            registrar_log(cursor, 'ACESSO_NEGADO', 'sistema', None,
+                          f"permissao={permissao}; rota={request.path}; perfil={perfil_atual()}")
+            conn.commit()
+            conn.close()
+
+            if resposta_json:
+                return jsonify(erro='Acesso negado'), 403
+            flash('Você não tem permissão para acessar essa área.')
+            # Evita loop: quem nem pode visualizar a listagem é desconectado
+            if request.endpoint != 'index' and pode('visualizar'):
+                return redirect(url_for('index'))
+            return redirect(url_for('logout'))
+        return interna
+    return decorador
+
+
+@app.context_processor
+def injetar_perfil():
+    """Deixa pode('permissao') e o rótulo do perfil disponíveis em todos os templates."""
+    return {'pode': pode, 'perfil_rotulo': ROTULOS_PERFIL[perfil_atual()]}
+
+
 @app.before_request
 def verificar_login():
     if 'email' not in session and request.endpoint not in ['login', 'logout', 'static']:
@@ -111,7 +177,8 @@ def login():
             session['email'] = usuario['email']
             session['usuario'] = usuario['nome']
             session['perfil'] = usuario['perfil']
-            registrar_log(cursor, 'LOGIN', 'sistema', usuario['id'], 'Login realizado com sucesso')
+            registrar_log(cursor, 'LOGIN', 'sistema', usuario['id'],
+                          f"Login realizado com sucesso (perfil={usuario['perfil']})")
             conn.commit()
             conn.close()
             return redirect(url_for('index'))
@@ -161,6 +228,7 @@ ORDENACOES = {
 
 
 @app.route('/')
+@requer_permissao('visualizar')
 def index():
     tipo_busca = request.args.get('tipo_busca', '')
     termo = request.args.get('termo', '').strip()
@@ -219,6 +287,7 @@ def index():
 # ---------------------------------------------------------------- DEMANDAS
 
 @app.route('/nova_demanda', methods=['GET', 'POST'])
+@requer_permissao('criar_demanda')
 def nova_demanda():
     if request.method == 'POST':
         titulo = request.form['titulo']
@@ -252,6 +321,7 @@ def nova_demanda():
 
 
 @app.route('/editar/<int:id>', methods=['GET', 'POST'])
+@requer_permissao('editar_demanda')
 def editar(id):
     conn = get_db()
     cursor = conn.cursor()
@@ -297,6 +367,7 @@ def editar(id):
 
 
 @app.route('/deletar/<int:id>', methods=['POST'])
+@requer_permissao('excluir_demanda')
 def deletar(id):
     conn = get_db()
     cursor = conn.cursor()
@@ -326,6 +397,7 @@ def deletar(id):
 
 
 @app.route('/detalhes/<int:id>')
+@requer_permissao('visualizar')
 def detalhes(id):
     conn = get_db()
     cursor = conn.cursor()
@@ -349,6 +421,7 @@ def detalhes(id):
 
 
 @app.route('/cancelar/<int:id>', methods=['POST'])
+@requer_permissao('alterar_status')
 def cancelar(id):
     conn = get_db()
     cursor = conn.cursor()
@@ -374,6 +447,7 @@ def cancelar(id):
 
 
 @app.route('/responsavel/<int:id>', methods=['POST'])
+@requer_permissao('alterar_status')
 def assumir_responsabilidade(id):
     conn = get_db()
     cursor = conn.cursor()
@@ -407,6 +481,7 @@ def assumir_responsabilidade(id):
 
 
 @app.route('/concluir/<int:id>', methods=['POST'])
+@requer_permissao('alterar_status')
 def concluir(id):
     conn = get_db()
     cursor = conn.cursor()
@@ -442,6 +517,7 @@ def concluir(id):
 # ---------------------------------------------------------------- COMENTÁRIOS
 
 @app.route('/adicionar_comentario/<int:demanda_id>', methods=['POST'])
+@requer_permissao('comentar')
 def adicionar_comentario(demanda_id):
     comentario = request.form.get('comentario', '').strip()
     autor = f"{session['usuario']} (#{session['usuario_id']})"
@@ -670,6 +746,7 @@ def _seguro_csv(valor):
 
 
 @app.route('/dashboard')
+@requer_permissao('ver_painel')
 def dashboard():
     filtros = ler_filtros_dashboard(request.args)
     conn = get_db()
@@ -680,6 +757,7 @@ def dashboard():
 
 
 @app.route('/dashboard/dados')
+@requer_permissao('ver_painel', resposta_json=True)
 def dashboard_dados():
     """JSON usado pelo dashboard para atualizar KPIs e gráficos sem recarregar a página."""
     filtros = ler_filtros_dashboard(request.args)
@@ -690,6 +768,7 @@ def dashboard_dados():
 
 
 @app.route('/dashboard/exportar')
+@requer_permissao('ver_painel')
 def dashboard_exportar():
     """Exporta CSV (abre no Excel) respeitando todos os filtros e a visão ativa."""
     filtros = ler_filtros_dashboard(request.args)
@@ -727,6 +806,7 @@ def dashboard_exportar():
 
 
 @app.route('/dashboard/relatorio')
+@requer_permissao('ver_painel')
 def dashboard_relatorio():
     """Versão para impressão / 'Salvar como PDF' do navegador, com cabeçalho e filtros no rodapé."""
     filtros = ler_filtros_dashboard(request.args)
@@ -745,6 +825,7 @@ def dashboard_relatorio():
 # ---------------------------------------------------------------- AUDITORIA
 
 @app.route('/logs')
+@requer_permissao('ver_logs')
 def ver_logs():
     acao = request.args.get('acao', '')
     if acao not in ACOES_LOG:

@@ -21,7 +21,7 @@ CREATE TABLE solicitantes (
     nome TEXT NOT NULL,
     email TEXT NOT NULL UNIQUE,
     senha TEXT NOT NULL,                      -- hash da senha (nunca texto puro)
-    perfil TEXT NOT NULL DEFAULT 'usuario'    -- 'usuario' ou 'auditor' (pode ver /logs)
+    perfil TEXT NOT NULL DEFAULT 'usuario'    -- 'usuario' ou 'admin' (ver PERMISSOES_POR_PERFIL no app.py)
 )
 ''')
 
@@ -73,11 +73,11 @@ CREATE TABLE IF NOT EXISTS logs (
 
 # DADOS INSERIDOS:
 # (nome, email, senha, perfil) - as senhas são gravadas como hash.
-# Ajuste quais usuários são 'auditor' conforme o seu time.
+# Ajuste quais usuários são 'admin' conforme o seu time.
 solicitantes_iniciais = [
-    ('Juliana Castanho Teixeira', 'juliana@gmail.com', 'juliana', 'auditor'),
-    ('Lucas boeira', 'lucas@gmail.com', 'lucas', 'auditor'),
-    ('Gabriel Techio', 'techio@gmail.com', 'techio', 'auditor'),
+    ('Juliana Castanho Teixeira', 'juliana@gmail.com', 'juliana', 'admin'),
+    ('Lucas boeira', 'lucas@gmail.com', 'lucas', 'admin'),
+    ('Gabriel Techio', 'techio@gmail.com', 'techio', 'admin'),
     ('João Silva', 'joaosilva@gmail.com', 'joao', 'usuario'),   # e-mail sem acento (type="email" não aceita)
     ('Maria Santos', 'mariasantos@gmail.com', 'maria', 'usuario'),
     ('Pedro Costa', 'pedrocosta@gmail.com', 'pedro', 'usuario'),

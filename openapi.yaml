@@ -1,0 +1,1031 @@
+openapi: 3.0.3
+
+info:
+  title: SGDI - API de Gestão de Demandas
+  version: "1.0.0"
+  description: |
+    API REST do **SGDI (Sistema de Gestão de Demandas Internas)** para integração com sistemas externos.
+
+    ## Como começar
+    1. Chame `POST /auth/token` com e-mail e senha para receber um **token Bearer**.
+    2. Envie o token em todas as demais chamadas: `Authorization: Bearer <token>`.
+    3. Ao terminar, revogue o token com `DELETE /auth/token`.
+
+    No Swagger UI, use o botão **Authorize** (cadeado) e cole só o token (sem a palavra `Bearer`).
+
+    ## Padrões da API
+    - Dados em JSON (`Content-Type: application/json` nas requisições com corpo).
+    - **Sucesso:** `{"dados": ...}`. Listas trazem também `"paginacao"`.
+    - **Erro:** `{"erro": {"codigo": "...", "mensagem": "...", "campos": {...}}}`. Use o `codigo` para decidir o que fazer; `campos` lista os campos inválidos (erro 422).
+    - Datas de prazo: `AAAA-MM-DD`. Datas/horas de registro: `AAAA-MM-DD HH:MM:SS` (horário do servidor).
+    - O token vale por tempo limitado (padrão 12 horas) e pode ser revogado. A autenticação é **somente** pelo cabeçalho `Authorization`; cookies são ignorados.
+
+    ## Permissões por perfil
+    | Permissão | usuario | integracao | admin |
+    |---|:-:|:-:|:-:|
+    | visualizar (consultas) | sim | sim | sim |
+    | criar_demanda | sim | sim | sim |
+    | comentar | sim | sim | sim |
+    | alterar_status (assumir, concluir, cancelar) | não | sim | sim |
+    | editar_demanda | não | não | sim |
+    | excluir_demanda | não | não | sim |
+    | ver_painel (dashboard) | não | não | sim |
+    | ver_logs | não | não | sim |
+
+    Sistemas externos devem usar uma conta de perfil `integracao`, nunca a conta de uma pessoa.
+
+    ## Status de uma demanda
+    - `status`: valor gravado (`Aberto`, `Concluído` ou `Cancelado`).
+    - `status_exibido`: igual ao `status`, exceto que uma demanda `Aberto` com prazo vencido aparece como `Atrasado`. Os filtros por `status` usam o `status_exibido`.
+
+    ## Códigos de erro
+    | HTTP | codigo | Quando |
+    |---|---|---|
+    | 400 | `requisicao_invalida` | Corpo ausente, não JSON ou não é um objeto |
+    | 401 | `nao_autenticado`, `token_invalido`, `token_expirado`, `credenciais_invalidas` | Sem token, token desconhecido/revogado/expirado ou login errado |
+    | 403 | `acesso_negado`, `nao_e_responsavel` | Perfil sem permissão / só o responsável conclui |
+    | 404 | `demanda_nao_encontrada`, `nao_encontrado` | Demanda ou rota inexistente |
+    | 409 | `ja_tem_responsavel`, `demanda_finalizada`, `demanda_alterada` | Regra de negócio impede a operação |
+    | 405 | `metodo_nao_permitido` | Método HTTP não existe para esta rota (veja o cabeçalho `Allow`) |
+    | 413 | `corpo_grande_demais` | Corpo maior que 1 MB |
+    | 415 | `tipo_nao_suportado` | Tipo de conteúdo não suportado |
+    | 422 | `validacao` | Dados inválidos (veja `campos`) |
+    | 429 | `muitas_tentativas` | Muitos logins falhos (veja o cabeçalho `Retry-After`) |
+    | 500 | `erro_interno` | Falha inesperada do servidor |
+
+servers:
+  - url: /api/v1
+    description: Esta instância do SGDI
+
+tags:
+  - name: Autenticação
+    description: Emissão e revogação de tokens
+  - name: Demandas
+    description: Consulta e manipulação de demandas
+  - name: Comentários
+    description: Comentários de uma demanda
+  - name: Gerencial
+    description: Dashboard e auditoria (somente administradores)
+
+security:
+  - bearerAuth: []
+
+paths:
+  /auth/token:
+    post:
+      tags: [Autenticação]
+      summary: Emitir token
+      description: |
+        Troca e-mail e senha por um token Bearer. **O token só aparece nesta resposta** — guarde-o.
+        Depois de 5 logins falhos do mesmo IP em 15 minutos, novas tentativas recebem 429.
+      operationId: emitirToken
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Credenciais'
+            example:
+              email: integracao@sgdi.local
+              senha: integracao
+      responses:
+        '200':
+          description: Token emitido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResposta'
+        '400':
+          $ref: '#/components/responses/Erro400'
+        '401':
+          description: E-mail ou senha incorretos (`credenciais_invalidas`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erro'
+        '422':
+          $ref: '#/components/responses/Erro422'
+        '429':
+          $ref: '#/components/responses/Erro429'
+    delete:
+      tags: [Autenticação]
+      summary: Revogar o token atual
+      description: Encerra a "sessão" da API. Outros tokens do mesmo usuário continuam válidos.
+      operationId: revogarToken
+      responses:
+        '204':
+          description: Token revogado (sem conteúdo)
+        '401':
+          $ref: '#/components/responses/Erro401'
+
+  /me:
+    get:
+      tags: [Autenticação]
+      summary: Quem sou eu
+      description: Usuário dono do token, permissões do perfil e validade do token.
+      operationId: me
+      responses:
+        '200':
+          description: Dados do usuário autenticado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResposta'
+        '401':
+          $ref: '#/components/responses/Erro401'
+
+  /demandas:
+    get:
+      tags: [Demandas]
+      summary: Listar demandas
+      description: Lista paginada, com filtros combináveis. Valores inválidos de filtro retornam 422.
+      operationId: listarDemandas
+      parameters:
+        - name: status
+          in: query
+          description: Filtra pelo `status_exibido`.
+          schema:
+            type: string
+            enum: [Aberto, Atrasado, Concluído, Cancelado]
+        - name: prioridade
+          in: query
+          schema:
+            $ref: '#/components/schemas/Prioridade'
+        - name: responsavel_id
+          in: query
+          description: Id do responsável, ou `sem` para demandas sem responsável.
+          schema:
+            type: string
+            example: "4"
+        - name: solicitante_id
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+        - name: busca
+          in: query
+          description: Texto contido no título ou no nome do solicitante (até 100 caracteres).
+          schema:
+            type: string
+            maxLength: 100
+        - name: criada_de
+          in: query
+          description: Criadas a partir desta data (AAAA-MM-DD).
+          schema:
+            type: string
+            format: date
+        - name: criada_ate
+          in: query
+          description: Criadas até esta data (AAAA-MM-DD).
+          schema:
+            type: string
+            format: date
+        - name: ordenar
+          in: query
+          description: Critério de ordenação (padrão `prioridade`). Empates são desfeitos pelo id.
+          schema:
+            type: string
+            enum: [solicitante, data, prioridade, prazo]
+            default: prioridade
+        - $ref: '#/components/parameters/Pagina'
+        - $ref: '#/components/parameters/PorPagina'
+      responses:
+        '200':
+          description: Página de demandas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemandaLista'
+        '401':
+          $ref: '#/components/responses/Erro401'
+        '403':
+          $ref: '#/components/responses/Erro403'
+        '422':
+          $ref: '#/components/responses/Erro422'
+    post:
+      tags: [Demandas]
+      summary: Criar demanda
+      description: |
+        Cria uma demanda aberta. O **solicitante é sempre o dono do token** (não vai no corpo).
+        Campos desconhecidos ou somente leitura (`id`, `status`, `solicitante_id`...) são rejeitados com 422.
+        Por padrão o título não aceita pontuação (mesma regra das telas).
+      operationId: criarDemanda
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DemandaNova'
+            example:
+              titulo: Integrar com o ERP
+              descricao: Enviar as demandas concluídas para o ERP
+              prioridade: Alta
+              prazo: "2030-12-31"
+      responses:
+        '201':
+          description: Demanda criada
+          headers:
+            Location:
+              description: URL da nova demanda
+              schema:
+                type: string
+                example: /api/v1/demandas/16
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemandaResposta'
+        '400':
+          $ref: '#/components/responses/Erro400'
+        '401':
+          $ref: '#/components/responses/Erro401'
+        '403':
+          $ref: '#/components/responses/Erro403'
+        '422':
+          $ref: '#/components/responses/Erro422'
+
+  /demandas/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdDemanda'
+    get:
+      tags: [Demandas]
+      summary: Consultar uma demanda
+      operationId: obterDemanda
+      responses:
+        '200':
+          description: A demanda
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemandaResposta'
+        '401':
+          $ref: '#/components/responses/Erro401'
+        '403':
+          $ref: '#/components/responses/Erro403'
+        '404':
+          $ref: '#/components/responses/Erro404'
+    patch:
+      tags: [Demandas]
+      summary: Editar demanda (parcial)
+      description: Envie apenas os campos que mudam. Só registra log se algo realmente mudou. Exige perfil `admin`.
+      operationId: editarDemanda
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DemandaEdicao'
+            example:
+              prioridade: Urgente
+      responses:
+        '200':
+          description: Demanda atualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemandaResposta'
+        '400':
+          $ref: '#/components/responses/Erro400'
+        '401':
+          $ref: '#/components/responses/Erro401'
+        '403':
+          $ref: '#/components/responses/Erro403'
+        '404':
+          $ref: '#/components/responses/Erro404'
+        '422':
+          $ref: '#/components/responses/Erro422'
+    delete:
+      tags: [Demandas]
+      summary: Excluir demanda
+      description: Remove a demanda e os comentários dela. A exclusão fica registrada no log. Exige perfil `admin`.
+      operationId: excluirDemanda
+      responses:
+        '204':
+          description: Demanda excluída (sem conteúdo)
+        '401':
+          $ref: '#/components/responses/Erro401'
+        '403':
+          $ref: '#/components/responses/Erro403'
+        '404':
+          $ref: '#/components/responses/Erro404'
+
+  /demandas/{id}/responsavel:
+    parameters:
+      - $ref: '#/components/parameters/IdDemanda'
+    post:
+      tags: [Demandas]
+      summary: Assumir a responsabilidade
+      description: O dono do token passa a ser o responsável (sem corpo). Só é possível se a demanda estiver em andamento e sem responsável.
+      operationId: assumirResponsabilidade
+      responses:
+        '200':
+          description: Demanda com o novo responsável
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemandaResposta'
+        '401':
+          $ref: '#/components/responses/Erro401'
+        '403':
+          $ref: '#/components/responses/Erro403'
+        '404':
+          $ref: '#/components/responses/Erro404'
+        '409':
+          $ref: '#/components/responses/Erro409'
+
+  /demandas/{id}/concluir:
+    parameters:
+      - $ref: '#/components/parameters/IdDemanda'
+    post:
+      tags: [Demandas]
+      summary: Concluir a demanda
+      description: Somente o responsável pode concluir (403 `nao_e_responsavel` para os demais). Sem corpo.
+      operationId: concluirDemanda
+      responses:
+        '200':
+          description: Demanda concluída
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemandaResposta'
+        '401':
+          $ref: '#/components/responses/Erro401'
+        '403':
+          $ref: '#/components/responses/Erro403'
+        '404':
+          $ref: '#/components/responses/Erro404'
+        '409':
+          $ref: '#/components/responses/Erro409'
+
+  /demandas/{id}/cancelar:
+    parameters:
+      - $ref: '#/components/parameters/IdDemanda'
+    post:
+      tags: [Demandas]
+      summary: Cancelar a demanda
+      description: Demandas já concluídas ou canceladas não podem ser canceladas (409). Sem corpo.
+      operationId: cancelarDemanda
+      responses:
+        '200':
+          description: Demanda cancelada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemandaResposta'
+        '401':
+          $ref: '#/components/responses/Erro401'
+        '403':
+          $ref: '#/components/responses/Erro403'
+        '404':
+          $ref: '#/components/responses/Erro404'
+        '409':
+          $ref: '#/components/responses/Erro409'
+
+  /demandas/{id}/comentarios:
+    parameters:
+      - $ref: '#/components/parameters/IdDemanda'
+    get:
+      tags: [Comentários]
+      summary: Listar comentários da demanda
+      operationId: listarComentarios
+      parameters:
+        - $ref: '#/components/parameters/Pagina'
+        - $ref: '#/components/parameters/PorPagina'
+      responses:
+        '200':
+          description: Página de comentários (do mais antigo ao mais novo)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComentarioLista'
+        '401':
+          $ref: '#/components/responses/Erro401'
+        '403':
+          $ref: '#/components/responses/Erro403'
+        '404':
+          $ref: '#/components/responses/Erro404'
+        '422':
+          $ref: '#/components/responses/Erro422'
+    post:
+      tags: [Comentários]
+      summary: Comentar a demanda
+      description: O autor é o dono do token. Texto de 1 a 1000 caracteres.
+      operationId: criarComentario
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ComentarioNovo'
+            example:
+              comentario: Integração concluída em homologação.
+      responses:
+        '201':
+          description: Comentário criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComentarioResposta'
+        '400':
+          $ref: '#/components/responses/Erro400'
+        '401':
+          $ref: '#/components/responses/Erro401'
+        '403':
+          $ref: '#/components/responses/Erro403'
+        '404':
+          $ref: '#/components/responses/Erro404'
+        '422':
+          $ref: '#/components/responses/Erro422'
+
+  /dashboard:
+    get:
+      tags: [Gerencial]
+      summary: Indicadores do dashboard
+      description: |
+        Mesmos números do dashboard das telas. Exige perfil `admin`.
+        Filtros com valor inválido são ignorados; o campo `filtros` da resposta mostra o que foi aplicado.
+      operationId: dashboard
+      parameters:
+        - name: visao
+          in: query
+          description: "`criticas_atrasadas` mostra só demandas urgentes e atrasadas."
+          schema:
+            type: string
+            enum: [criticas_atrasadas]
+        - name: data_inicio
+          in: query
+          description: Criadas a partir desta data (AAAA-MM-DD).
+          schema:
+            type: string
+            format: date
+        - name: data_fim
+          in: query
+          description: Criadas até esta data (AAAA-MM-DD).
+          schema:
+            type: string
+            format: date
+        - name: responsavel
+          in: query
+          description: Id do responsável, ou `sem`.
+          schema:
+            type: string
+        - name: prioridade
+          in: query
+          schema:
+            $ref: '#/components/schemas/Prioridade'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [Aberto, Atrasado, Concluído, Cancelado]
+      responses:
+        '200':
+          description: Indicadores calculados
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardResposta'
+        '401':
+          $ref: '#/components/responses/Erro401'
+        '403':
+          $ref: '#/components/responses/Erro403'
+
+  /logs:
+    get:
+      tags: [Gerencial]
+      summary: Logs de auditoria
+      description: Do mais recente para o mais antigo. Exige perfil `admin`.
+      operationId: listarLogs
+      parameters:
+        - name: acao
+          in: query
+          description: Filtra por ação (por exemplo `API_LOGIN`, `CRIAR_DEMANDA` ou `ACESSO_NEGADO`).
+          schema:
+            type: string
+            example: API_LOGIN
+        - $ref: '#/components/parameters/Pagina'
+        - $ref: '#/components/parameters/PorPagina'
+      responses:
+        '200':
+          description: Página de logs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogLista'
+        '401':
+          $ref: '#/components/responses/Erro401'
+        '403':
+          $ref: '#/components/responses/Erro403'
+        '422':
+          $ref: '#/components/responses/Erro422'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Token obtido em `POST /auth/token`.
+
+  parameters:
+    IdDemanda:
+      name: id
+      in: path
+      required: true
+      description: Id da demanda.
+      schema:
+        type: integer
+        minimum: 1
+        example: 2
+    Pagina:
+      name: pagina
+      in: query
+      description: Número da página (começa em 1). Além da última página a lista vem vazia.
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PorPagina:
+      name: por_pagina
+      in: query
+      description: Itens por página (1 a 100).
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+  responses:
+    Erro400:
+      description: Corpo ausente, não JSON ou não é um objeto (`requisicao_invalida`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Erro'
+    Erro401:
+      description: Sem token, ou token inválido, revogado ou expirado
+      headers:
+        WWW-Authenticate:
+          schema:
+            type: string
+            example: Bearer realm="SGDI API"
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Erro'
+          example:
+            erro:
+              codigo: nao_autenticado
+              mensagem: 'Envie o cabeçalho "Authorization: Bearer <token>".'
+              campos: {}
+    Erro403:
+      description: O perfil não tem permissão (`acesso_negado`) ou não é o responsável (`nao_e_responsavel`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Erro'
+          example:
+            erro:
+              codigo: acesso_negado
+              mensagem: Seu perfil não tem permissão para esta operação.
+              campos: {}
+    Erro404:
+      description: Demanda não encontrada (`demanda_nao_encontrada`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Erro'
+    Erro409:
+      description: Regra de negócio impede a operação (`ja_tem_responsavel`, `demanda_finalizada` ou `demanda_alterada`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Erro'
+          example:
+            erro:
+              codigo: ja_tem_responsavel
+              mensagem: Essa demanda já tem um responsável.
+              campos: {}
+    Erro422:
+      description: Dados inválidos (`validacao`); `campos` indica o que corrigir
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Erro'
+          example:
+            erro:
+              codigo: validacao
+              mensagem: Dados inválidos.
+              campos:
+                prioridade: "Use um destes valores: Urgente, Alta, Média, Baixa."
+                prazo: Use o formato AAAA-MM-DD com uma data válida.
+    Erro429:
+      description: Muitas tentativas de login falhas (`muitas_tentativas`)
+      headers:
+        Retry-After:
+          description: Segundos até poder tentar de novo
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Erro'
+
+  schemas:
+    Erro:
+      type: object
+      required: [erro]
+      properties:
+        erro:
+          type: object
+          required: [codigo, mensagem, campos]
+          properties:
+            codigo:
+              type: string
+              example: validacao
+            mensagem:
+              type: string
+            campos:
+              type: object
+              description: Mensagem de erro por campo (vazio quando não se aplica).
+              additionalProperties:
+                type: string
+
+    Paginacao:
+      type: object
+      properties:
+        pagina:
+          type: integer
+          example: 1
+        por_pagina:
+          type: integer
+          example: 20
+        total:
+          type: integer
+          description: Total de itens que atendem aos filtros.
+          example: 15
+        total_paginas:
+          type: integer
+          example: 1
+
+    Prioridade:
+      type: string
+      enum: [Urgente, Alta, Média, Baixa]
+
+    Credenciais:
+      type: object
+      required: [email, senha]
+      properties:
+        email:
+          type: string
+          example: integracao@sgdi.local
+        senha:
+          type: string
+          format: password
+
+    Usuario:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 8
+        nome:
+          type: string
+          example: Integração SGDI
+        email:
+          type: string
+          example: integracao@sgdi.local
+        perfil:
+          type: string
+          enum: [usuario, integracao, admin]
+        perfil_rotulo:
+          type: string
+          example: Integração
+
+    TokenResposta:
+      type: object
+      properties:
+        dados:
+          type: object
+          properties:
+            token:
+              type: string
+              description: Guarde com segurança; não será exibido de novo.
+            tipo:
+              type: string
+              example: Bearer
+            expira_em:
+              type: string
+              example: "2026-11-10 20:00:00"
+            expira_em_segundos:
+              type: integer
+              example: 43200
+            usuario:
+              $ref: '#/components/schemas/Usuario'
+
+    MeResposta:
+      type: object
+      properties:
+        dados:
+          type: object
+          properties:
+            usuario:
+              $ref: '#/components/schemas/Usuario'
+            permissoes:
+              type: array
+              items:
+                type: string
+              example: [alterar_status, comentar, criar_demanda, visualizar]
+            token:
+              type: object
+              properties:
+                expira_em:
+                  type: string
+                  example: "2026-11-10 20:00:00"
+
+    Demanda:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 16
+        titulo:
+          type: string
+          maxLength: 100
+        descricao:
+          type: string
+          maxLength: 1000
+        solicitante:
+          type: string
+          example: João Silva
+        solicitante_id:
+          type: integer
+          example: 4
+        responsavel:
+          type: string
+          nullable: true
+        responsavel_id:
+          type: integer
+          nullable: true
+        prioridade:
+          $ref: '#/components/schemas/Prioridade'
+        prazo:
+          type: string
+          format: date
+          example: "2030-12-31"
+        status:
+          type: string
+          description: Valor gravado.
+          enum: [Aberto, Concluído, Cancelado]
+        status_exibido:
+          type: string
+          description: Inclui `Atrasado` (aberta com prazo vencido).
+          enum: [Aberto, Atrasado, Concluído, Cancelado]
+        data_criacao:
+          type: string
+          example: "2026-11-10 10:30:00"
+        data_conclusao:
+          type: string
+          nullable: true
+
+    DemandaNova:
+      type: object
+      required: [titulo, descricao, prioridade, prazo]
+      additionalProperties: false
+      properties:
+        titulo:
+          type: string
+          maxLength: 100
+          description: Sem pontuação por padrão (mesma regra das telas).
+        descricao:
+          type: string
+          maxLength: 1000
+        prioridade:
+          $ref: '#/components/schemas/Prioridade'
+        prazo:
+          type: string
+          format: date
+          description: AAAA-MM-DD
+
+    DemandaEdicao:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        titulo:
+          type: string
+          maxLength: 100
+        descricao:
+          type: string
+          maxLength: 1000
+        prioridade:
+          $ref: '#/components/schemas/Prioridade'
+        prazo:
+          type: string
+          format: date
+
+    DemandaResposta:
+      type: object
+      properties:
+        dados:
+          $ref: '#/components/schemas/Demanda'
+
+    DemandaLista:
+      type: object
+      properties:
+        dados:
+          type: array
+          items:
+            $ref: '#/components/schemas/Demanda'
+        paginacao:
+          $ref: '#/components/schemas/Paginacao'
+
+    Comentario:
+      type: object
+      properties:
+        id:
+          type: integer
+        demanda_id:
+          type: integer
+        autor:
+          type: string
+          example: João Silva (#4)
+        comentario:
+          type: string
+          maxLength: 1000
+        criado_em:
+          type: string
+          example: "2026-11-10 10:45:00"
+
+    ComentarioNovo:
+      type: object
+      required: [comentario]
+      additionalProperties: false
+      properties:
+        comentario:
+          type: string
+          minLength: 1
+          maxLength: 1000
+
+    ComentarioResposta:
+      type: object
+      properties:
+        dados:
+          $ref: '#/components/schemas/Comentario'
+
+    ComentarioLista:
+      type: object
+      properties:
+        dados:
+          type: array
+          items:
+            $ref: '#/components/schemas/Comentario'
+        paginacao:
+          $ref: '#/components/schemas/Paginacao'
+
+    Log:
+      type: object
+      properties:
+        id:
+          type: integer
+        data_hora:
+          type: string
+          example: "2026-11-10 10:30:00"
+        usuario_id:
+          type: integer
+          nullable: true
+        usuario_nome:
+          type: string
+          nullable: true
+        acao:
+          type: string
+          example: CRIAR_DEMANDA
+        entidade:
+          type: string
+          example: demanda
+        entidade_id:
+          type: integer
+          nullable: true
+        detalhes:
+          type: string
+          nullable: true
+          description: Termina com `origem=api` quando a ação veio pela API.
+        ip:
+          type: string
+          nullable: true
+
+    LogLista:
+      type: object
+      properties:
+        dados:
+          type: array
+          items:
+            $ref: '#/components/schemas/Log'
+        paginacao:
+          $ref: '#/components/schemas/Paginacao'
+
+    DashboardResposta:
+      type: object
+      properties:
+        dados:
+          type: object
+          properties:
+            total:
+              type: integer
+              description: Total de demandas dentro dos filtros.
+            status:
+              type: object
+              description: Quantidade (`n`) e percentual (`pct`) por status exibido.
+              additionalProperties:
+                type: object
+                properties:
+                  n:
+                    type: integer
+                  pct:
+                    type: number
+            prioridade:
+              type: object
+              description: Quantidade por prioridade.
+              additionalProperties:
+                type: integer
+            criticas:
+              type: array
+              description: Demandas urgentes (atrasadas primeiro).
+              items:
+                $ref: '#/components/schemas/DashboardCritica'
+            criticas_atrasadas:
+              type: array
+              items:
+                $ref: '#/components/schemas/DashboardCritica'
+            por_responsavel:
+              type: array
+              description: Demandas em aberto por responsável.
+              items:
+                type: object
+                properties:
+                  nome:
+                    type: string
+                  sem_responsavel:
+                    type: integer
+                    description: 1 quando o grupo é "Sem responsável".
+                  abertas:
+                    type: integer
+                  atrasadas:
+                    type: integer
+            sem_responsavel:
+              type: integer
+              description: Demandas em aberto sem responsável.
+            tempo_medio:
+              type: object
+              properties:
+                dias:
+                  type: number
+                  nullable: true
+                  description: Tempo médio de resolução ponderado (críticas pesam mais).
+                dias_simples:
+                  type: number
+                  nullable: true
+                consideradas:
+                  type: integer
+                fora_sla:
+                  type: integer
+                peso_critica:
+                  type: integer
+            evolucao:
+              type: object
+              properties:
+                labels:
+                  type: array
+                  items:
+                    type: string
+                criadas:
+                  type: array
+                  items:
+                    type: integer
+                concluidas:
+                  type: array
+                  items:
+                    type: integer
+            filtros_texto:
+              type: string
+            filtros:
+              type: object
+              description: Filtros efetivamente aplicados.
+              additionalProperties:
+                type: string
+
+    DashboardCritica:
+      type: object
+      properties:
+        id:
+          type: integer
+        titulo:
+          type: string
+        solicitante:
+          type: string
+        responsavel:
+          type: string
+          nullable: true
+        prazo:
+          type: string
+        status_exibido:
+          type: string

@@ -10,6 +10,7 @@ from werkzeug.security import check_password_hash
 
 import servicos
 from api import api_bp
+from docs import docs_bp
 from core import (ACOES_LOG, NOME_EMPRESA, ORDENACOES, PRIORIDADES, ROTULOS_PERFIL,
                   STATUS_EXIBIDOS, calcular_dashboard, caminho_banco, caracteres_invalidos,
                   descrever_filtros, garantir_tabela_tokens, get_db, ler_filtros_dashboard,
@@ -76,7 +77,8 @@ def verificar_login():
         return redirect(url_for('login'))
 
 
-app.register_blueprint(api_bp)   # API REST em /api/v1
+app.register_blueprint(api_bp)    # API REST em /api/v1
+app.register_blueprint(docs_bp)   # documentação: /api/docs e /api/openapi.yaml
 
 
 # ---------------------------------------------------------------- LOGIN / LOGOUT

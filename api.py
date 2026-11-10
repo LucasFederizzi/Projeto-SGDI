@@ -92,10 +92,14 @@ def marcar_origem_api():
     g.origem = 'api'
 
 
-@api_bp.after_request
-def sem_cache(resposta):
-    # Respostas da API podem ter dados sensíveis (ex.: o token): nada de cache.
-    resposta.headers['Cache-Control'] = 'no-store'
+@api_bp.after_app_request
+def cabecalhos_de_seguranca(resposta):
+    # Vale para tudo que está em /api, inclusive os erros que o Flask gera antes de
+    # chegar numa rota (404/405/413...). Respostas podem ter dados sensíveis (ex.: o
+    # token): nada de cache; e o navegador não deve "adivinhar" o tipo do conteúdo.
+    if requisicao_api():
+        resposta.headers['Cache-Control'] = 'no-store'
+        resposta.headers['X-Content-Type-Options'] = 'nosniff'
     return resposta
 
 
@@ -183,6 +187,9 @@ def requer_token_api(permissao=None):
                 conn.close()
 
             return funcao(*args, **kwargs)
+        # Fica visível para os testes de segurança (test_api_seguranca.py): eles percorrem
+        # TODAS as rotas e conferem se cada uma tem decorator e a permissão certa.
+        interna.permissao_exigida = permissao
         return interna
     return decorador
 

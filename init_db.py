@@ -3,12 +3,16 @@ from datetime import datetime
 
 from werkzeug.security import generate_password_hash
 
-conn = sqlite3.connect('demandas.db')
+from core import SQL_TABELA_API_TOKENS, caminho_banco
+
+conn = sqlite3.connect(caminho_banco())
 cursor = conn.cursor()
 
 # ATENÇÃO: este script RECRIA solicitantes, demandas e comentários (dados de teste).
 # A tabela de LOGS NUNCA é apagada: ela é a base histórica de auditoria.
 
+# Tokens da API apontam para solicitantes: caem junto (tokens antigos ficariam órfãos)
+cursor.execute("DROP TABLE IF EXISTS api_tokens")
 cursor.execute("DROP TABLE IF EXISTS solicitantes")
 cursor.execute("DROP TABLE IF EXISTS comentarios")
 cursor.execute("DROP TABLE IF EXISTS demandas")
@@ -71,6 +75,10 @@ CREATE TABLE IF NOT EXISTS logs (
 ''')
 
 
+# Tokens de acesso da API REST (só o hash do token é guardado)
+cursor.execute(SQL_TABELA_API_TOKENS)
+
+
 # DADOS INSERIDOS:
 # (nome, email, senha, perfil) - as senhas são gravadas como hash.
 # Ajuste quais usuários são 'admin' conforme o seu time.
@@ -78,10 +86,13 @@ solicitantes_iniciais = [
     ('Juliana Castanho Teixeira', 'juliana@gmail.com', 'juliana', 'admin'),
     ('Lucas boeira', 'lucas@gmail.com', 'lucas', 'admin'),
     ('Gabriel Techio', 'techio@gmail.com', 'techio', 'admin'),
-    ('João Silva', 'joaosilva@gmail.com', 'joao', 'usuario'),   # e-mail sem acento (type="email" não aceita)
+    ('João Silva', 'joaosilva@gmail.com', 'joao', 'usuario'),
     ('Maria Santos', 'mariasantos@gmail.com', 'maria', 'usuario'),
     ('Pedro Costa', 'pedrocosta@gmail.com', 'pedro', 'usuario'),
     ('Ana Lima', 'analima@gmail.com', 'ana', 'usuario'),
+    # Conta de serviço para sistemas externos via API (perfil com permissões mínimas).
+    # Em produção troque a senha ou crie a conta com uma senha forte.
+    ('Integração SGDI', 'integracao@sgdi.local', 'integracao', 'integracao'),
 ]
 cursor.executemany(
     "INSERT INTO solicitantes (nome, email, senha, perfil) VALUES (?, ?, ?, ?)",

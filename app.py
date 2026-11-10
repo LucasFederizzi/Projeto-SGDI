@@ -1,8 +1,6 @@
 import csv
 import io
 import os
-import sqlite3
-import string
 from datetime import datetime
 from functools import wraps
 
@@ -10,109 +8,30 @@ from flask import (Flask, render_template, request, redirect, url_for, flash,
                    session, jsonify, Response)
 from werkzeug.security import check_password_hash
 
+import servicos
+from api import api_bp
+from core import (ACOES_LOG, NOME_EMPRESA, ORDENACOES, PRIORIDADES, ROTULOS_PERFIL,
+                  STATUS_EXIBIDOS, calcular_dashboard, caminho_banco, caracteres_invalidos,
+                  descrever_filtros, garantir_tabela_tokens, get_db, ler_filtros_dashboard,
+                  linhas_relatorio, perfil_atual, pode, registrar_log, requisicao_api,
+                  resumo, usuario_atual)
+from servicos import ErroRegra, NAO_ENCONTRADO
+
+# Constantes, perfis/permissões, get_db, registrar_log, pode() etc. ficam em core.py,
+# compartilhados com a API (api.py). Nunca importe o app.py de outro módulo: ele roda
+# como __main__ e a importação criaria uma segunda aplicação.
+
 app = Flask(__name__)
 # Em produção defina a variável de ambiente SECRET_KEY
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-only-troque-em-producao')
+app.json.ensure_ascii = False                    # JSON com acentos legíveis (API e dashboard)
+app.config['MAX_CONTENT_LENGTH'] = 1024 * 1024   # corpo de requisição até 1 MB (413 acima disso)
 
-STATUS_FINAIS = ('Concluído', 'Cancelado')
-
-# Ações que podem aparecer na tela de logs (também usadas no filtro)
-ACOES_LOG = (
-    'LOGIN', 'LOGIN_FALHA', 'LOGOUT',
-    'CRIAR_DEMANDA', 'EDITAR_DEMANDA', 'EXCLUIR_DEMANDA',
-    'ASSUMIR_RESPONSABILIDADE', 'CONCLUIR_DEMANDA', 'CANCELAR_DEMANDA',
-    'CRIAR_COMENTARIO', 'INICIALIZAR_BANCO', 'EXPORTAR_RELATORIO',
-    'ACESSO_NEGADO',
-)
-
-# ---- Perfis e permissões ----
-# O perfil de cada pessoa fica na coluna solicitantes.perfil. No login o e-mail
-# identifica a conta e a conta define o perfil. Para criar um perfil novo
-# (ex.: 'gestor') basta adicionar uma entrada em PERMISSOES_POR_PERFIL e em
-# ROTULOS_PERFIL; para uma permissão nova, adicione o nome aqui e proteja a
-# rota com @requer_permissao('nome') (e os botões com {% if pode('nome') %}).
-PERFIL_USUARIO = 'usuario'
-PERFIL_ADMIN = 'admin'
-
-PERMISSOES_POR_PERFIL = {
-    PERFIL_USUARIO: {
-        'visualizar', 'criar_demanda', 'comentar',
-    },
-    PERFIL_ADMIN: {
-        'visualizar', 'criar_demanda', 'comentar',
-        'editar_demanda', 'excluir_demanda', 'alterar_status',
-        'ver_logs', 'ver_painel',
-    },
-}
-
-ROTULOS_PERFIL = {PERFIL_USUARIO: 'Usuário', PERFIL_ADMIN: 'Administrador'}
-
-# ---- Dashboard gerencial ----
-NOME_EMPRESA = os.environ.get('NOME_EMPRESA', 'SGDI - Sistema de Gestão de Demandas')
-PRIORIDADES = ('Urgente', 'Alta', 'Média', 'Baixa')
-STATUS_EXIBIDOS = ('Aberto', 'Atrasado', 'Concluído', 'Cancelado')
-PRIORIDADE_CRITICA = 'Urgente'   # "crítica" = prioridade Urgente
-PESO_CRITICA = 2                  # críticas pesam mais na média de tempo (demais = 1)
-
-# Atrasada = aberta com prazo vencido (usa a data LOCAL, não UTC)
-STATUS_EXIBIDO_SQL = (
-    "CASE WHEN status = 'Aberto' AND prazo < date('now', 'localtime') "
-    "THEN 'Atrasado' ELSE status END"
-)
-BASE_DEMANDAS = f"(SELECT *, {STATUS_EXIBIDO_SQL} AS status_exibido FROM demandas)"
-
-
-def get_db():
-    conn = sqlite3.connect('demandas.db')
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
-def caracteres_invalidos(*textos):
-    for texto in textos:
-        if texto and any(char in string.punctuation for char in texto):
-            return True
-    return False
-
-
-def agora():
-    return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-
-def resumo(valor, limite=80):
-    """Encurta textos longos para o log não ficar gigante."""
-    texto = '' if valor is None else str(valor)
-    return texto if len(texto) <= limite else texto[:limite] + '...'
-
-
-def registrar_log(cursor, acao, entidade, entidade_id, detalhes=None,
-                  usuario_id=None, usuario_nome=None):
-    """
-    Grava um registro de auditoria usando o MESMO cursor da operação: o commit
-    da rota grava a ação e o log juntos (ou nenhum dos dois).
-    Se usuario_id/usuario_nome não forem informados, usa o usuário da sessão.
-    """
-    cursor.execute(
-        """INSERT INTO logs (data_hora, usuario_id, usuario_nome, acao,
-                             entidade, entidade_id, detalhes, ip)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-        (
-            agora(),
-            usuario_id if usuario_id is not None else session.get('usuario_id'),
-            usuario_nome if usuario_nome is not None else session.get('usuario'),
-            acao, entidade, entidade_id, detalhes, request.remote_addr,
-        )
-    )
-
-
-def perfil_atual():
-    """Perfil da sessão. Perfil ausente ou desconhecido = o de menos privilégios."""
-    perfil = session.get('perfil')
-    return perfil if perfil in PERMISSOES_POR_PERFIL else PERFIL_USUARIO
-
-
-def pode(permissao):
-    return permissao in PERMISSOES_POR_PERFIL[perfil_atual()]
+# Banco criado antes da API ganha a tabela de tokens sem precisar rodar o init_db.py
+if os.path.exists(caminho_banco()):
+    _conn = get_db()
+    garantir_tabela_tokens(_conn)
+    _conn.close()
 
 
 def requer_permissao(permissao, resposta_json=False):
@@ -149,8 +68,15 @@ def injetar_perfil():
 
 @app.before_request
 def verificar_login():
+    # A API (/api/...) tem autenticação própria por token e responde 401 em JSON;
+    # redirecionar para a tela de login (HTML) não faz sentido para ela.
+    if requisicao_api():
+        return None
     if 'email' not in session and request.endpoint not in ['login', 'logout', 'static']:
         return redirect(url_for('login'))
+
+
+app.register_blueprint(api_bp)   # API REST em /api/v1
 
 
 # ---------------------------------------------------------------- LOGIN / LOGOUT
@@ -210,23 +136,6 @@ def logout():
 
 # ---------------------------------------------------------------- LISTAGEM
 
-ORDENACOES = {
-    'solicitante': "LOWER(solicitante) ASC",
-    'data': "data_criacao DESC",
-    'prioridade': """
-        CASE prioridade
-            WHEN 'Urgente' THEN 1
-            WHEN 'Alta' THEN 2
-            WHEN 'Média' THEN 3
-            WHEN 'Baixa' THEN 4
-            ELSE 5
-        END,
-        prazo ASC
-    """,
-    'prazo': "prazo ASC",
-}
-
-
 @app.route('/')
 @requer_permissao('visualizar')
 def index():
@@ -285,34 +194,43 @@ def index():
 
 
 # ---------------------------------------------------------------- DEMANDAS
+# As regras de negócio (validação, permissões de status, logs) ficam em servicos.py,
+# compartilhadas com a API. Aqui só cuidamos da tela: ler o formulário, chamar o
+# serviço, mostrar o flash e redirecionar.
+
+CAMPOS_FORM = ('titulo', 'descricao', 'prioridade', 'prazo')
+
+
+def _acao_na_tela(servico, id, sucesso, destino, *args):
+    """Executa um serviço com commit; em caso de erro mostra o aviso e volta para a tela certa."""
+    conn = get_db()
+    try:
+        servico(conn.cursor(), id, *args)
+        conn.commit()
+    except ErroRegra as erro:
+        flash(erro.texto_para_tela())
+        return redirect('/' if erro.tipo == NAO_ENCONTRADO else destino)
+    finally:
+        conn.close()
+    if sucesso:
+        flash(sucesso)
+    return redirect(destino)
+
 
 @app.route('/nova_demanda', methods=['GET', 'POST'])
 @requer_permissao('criar_demanda')
 def nova_demanda():
     if request.method == 'POST':
-        titulo = request.form['titulo']
-        descricao = request.form['descricao']
-        solicitante = session['usuario']
-        solicitante_id = session['usuario_id']
-        prioridade = request.form['prioridade']
-        prazo = request.form['prazo']
-
-        if caracteres_invalidos(titulo, prioridade):
-            flash('Os campos (exceto descrição) não podem conter caracteres especiais.')
-            return redirect('/nova_demanda')
-
+        dados = {campo: request.form.get(campo, '') for campo in CAMPOS_FORM}
         conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO demandas (titulo, descricao, solicitante, solicitante_id, data_criacao, prioridade, prazo) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (titulo, descricao, solicitante, solicitante_id, agora(), prioridade, prazo)
-        )
-        registrar_log(
-            cursor, 'CRIAR_DEMANDA', 'demanda', cursor.lastrowid,
-            f"titulo='{resumo(titulo)}'; prioridade={prioridade}; prazo={prazo}; descricao='{resumo(descricao)}'"
-        )
-        conn.commit()
-        conn.close()
+        try:
+            servicos.criar_demanda(conn.cursor(), usuario_atual(), dados)
+            conn.commit()
+        except ErroRegra as erro:
+            flash(erro.texto_para_tela())
+            return redirect('/nova_demanda')
+        finally:
+            conn.close()
 
         flash('Salvo!')
         return redirect('/')
@@ -323,77 +241,33 @@ def nova_demanda():
 @app.route('/editar/<int:id>', methods=['GET', 'POST'])
 @requer_permissao('editar_demanda')
 def editar(id):
-    conn = get_db()
-    cursor = conn.cursor()
-    demanda = cursor.execute('SELECT * FROM demandas WHERE id=?', (id,)).fetchone()
-
-    if demanda is None:
-        conn.close()
-        flash('Demanda não encontrada.')
-        return redirect('/')
-
     if request.method == 'POST':
-        titulo = request.form['titulo']
-        descricao = request.form['descricao']
-        prioridade = request.form['prioridade']
-        prazo = request.form['prazo']
-
-        if caracteres_invalidos(titulo, prioridade):
-            flash('Os campos (exceto descrição) não podem conter caracteres especiais.')
+        dados = {campo: request.form.get(campo, '') for campo in CAMPOS_FORM}
+        conn = get_db()
+        try:
+            servicos.editar_demanda(conn.cursor(), id, dados)
+            conn.commit()
+        except ErroRegra as erro:
+            flash(erro.texto_para_tela())
+            return redirect('/' if erro.tipo == NAO_ENCONTRADO else f'/editar/{id}')
+        finally:
             conn.close()
-            return redirect(f'/editar/{id}')
-
-        # Compara antes x depois e registra só o que realmente mudou
-        novos = {'titulo': titulo, 'descricao': descricao,
-                 'prioridade': prioridade, 'prazo': prazo}
-        mudancas = [
-            f"{campo}: '{resumo(demanda[campo])}' -> '{resumo(valor)}'"
-            for campo, valor in novos.items() if demanda[campo] != valor
-        ]
-
-        cursor.execute(
-            "UPDATE demandas SET titulo=?, descricao=?, prioridade=?, prazo=? WHERE id=?",
-            (titulo, descricao, prioridade, prazo, id)
-        )
-        if mudancas:
-            registrar_log(cursor, 'EDITAR_DEMANDA', 'demanda', id, '; '.join(mudancas))
-        conn.commit()
-        conn.close()
         flash('Demanda atualizada.')
         return redirect('/')
 
+    conn = get_db()
+    demanda = conn.execute('SELECT * FROM demandas WHERE id=?', (id,)).fetchone()
     conn.close()
+    if demanda is None:
+        flash('Demanda não encontrada.')
+        return redirect('/')
     return render_template('editar.html', demanda=demanda)
 
 
 @app.route('/deletar/<int:id>', methods=['POST'])
 @requer_permissao('excluir_demanda')
 def deletar(id):
-    conn = get_db()
-    cursor = conn.cursor()
-    demanda = cursor.execute('SELECT * FROM demandas WHERE id=?', (id,)).fetchone()
-
-    if demanda is None:
-        conn.close()
-        flash('Demanda não encontrada.')
-        return redirect('/')
-
-    # O log guarda um "retrato" da demanda, pois depois ela deixa de existir
-    comentarios_removidos = cursor.execute(
-        'DELETE FROM comentarios WHERE demanda_id=?', (id,)
-    ).rowcount
-    cursor.execute('DELETE FROM demandas WHERE id=?', (id,))
-    registrar_log(
-        cursor, 'EXCLUIR_DEMANDA', 'demanda', id,
-        f"titulo='{resumo(demanda['titulo'])}'; solicitante={demanda['solicitante']} "
-        f"(#{demanda['solicitante_id']}); prioridade={demanda['prioridade']}; "
-        f"prazo={demanda['prazo']}; status={demanda['status']}; "
-        f"comentarios_removidos={comentarios_removidos}"
-    )
-    conn.commit()
-    conn.close()
-    flash('Deletado!')
-    return redirect('/')
+    return _acao_na_tela(servicos.excluir_demanda, id, 'Deletado!', '/')
 
 
 @app.route('/detalhes/<int:id>')
@@ -423,95 +297,23 @@ def detalhes(id):
 @app.route('/cancelar/<int:id>', methods=['POST'])
 @requer_permissao('alterar_status')
 def cancelar(id):
-    conn = get_db()
-    cursor = conn.cursor()
-    demanda = cursor.execute('SELECT status FROM demandas WHERE id=?', (id,)).fetchone()
-
-    if demanda is None:
-        conn.close()
-        flash('Demanda não encontrada.')
-        return redirect('/')
-
-    if demanda['status'] in STATUS_FINAIS:
-        conn.close()
-        flash('Essa demanda já está finalizada e não pode ser cancelada.')
-        return redirect(f'/detalhes/{id}')
-
-    cursor.execute("UPDATE demandas SET status = 'Cancelado' WHERE id = ?", (id,))
-    registrar_log(cursor, 'CANCELAR_DEMANDA', 'demanda', id,
-                  f"status: '{demanda['status']}' -> 'Cancelado'")
-    conn.commit()
-    conn.close()
-    flash('Demanda cancelada.')
-    return redirect(f'/detalhes/{id}')
+    return _acao_na_tela(servicos.cancelar_demanda, id, 'Demanda cancelada.',
+                         f'/detalhes/{id}', usuario_atual())
 
 
 @app.route('/responsavel/<int:id>', methods=['POST'])
 @requer_permissao('alterar_status')
 def assumir_responsabilidade(id):
-    conn = get_db()
-    cursor = conn.cursor()
-    demanda = cursor.execute('SELECT status, responsavel_id FROM demandas WHERE id=?', (id,)).fetchone()
-
-    if demanda is None:
-        conn.close()
-        flash('Demanda não encontrada.')
-        return redirect('/')
-
-    if demanda['status'] in STATUS_FINAIS:
-        conn.close()
-        flash('Essa demanda já está finalizada.')
-        return redirect(f'/detalhes/{id}')
-
-    if demanda['responsavel_id'] is not None:
-        conn.close()
-        flash('Essa demanda já tem um responsável.')
-        return redirect(f'/detalhes/{id}')
-
-    cursor.execute(
-        'UPDATE demandas SET responsavel = ?, responsavel_id = ? WHERE id = ?',
-        (session['usuario'], session['usuario_id'], id)
-    )
-    registrar_log(cursor, 'ASSUMIR_RESPONSABILIDADE', 'demanda', id,
-                  f"responsavel: 'nenhum' -> '{session['usuario']} (#{session['usuario_id']})'")
-    conn.commit()
-    conn.close()
-    flash('Você ficou responsável por essa demanda.')
-    return redirect(f'/detalhes/{id}')
+    return _acao_na_tela(servicos.assumir_responsabilidade, id,
+                         'Você ficou responsável por essa demanda.',
+                         f'/detalhes/{id}', usuario_atual())
 
 
 @app.route('/concluir/<int:id>', methods=['POST'])
 @requer_permissao('alterar_status')
 def concluir(id):
-    conn = get_db()
-    cursor = conn.cursor()
-    demanda = cursor.execute('SELECT status, responsavel_id FROM demandas WHERE id=?', (id,)).fetchone()
-
-    if demanda is None:
-        conn.close()
-        flash('Demanda não encontrada.')
-        return redirect('/')
-
-    if demanda['status'] in STATUS_FINAIS:
-        conn.close()
-        flash('Essa demanda já está finalizada.')
-        return redirect(f'/detalhes/{id}')
-
-    if demanda['responsavel_id'] != session.get('usuario_id'):
-        conn.close()
-        flash('Só o responsável pela demanda pode concluí-la.')
-        return redirect(f'/detalhes/{id}')
-
-    cursor.execute(
-        "UPDATE demandas SET status = 'Concluído', data_conclusao = ? WHERE id = ?",
-        (agora(), id)
-    )
-    registrar_log(cursor, 'CONCLUIR_DEMANDA', 'demanda', id,
-                  f"status: '{demanda['status']}' -> 'Concluído'")
-    conn.commit()
-    conn.close()
-    flash('Demanda concluída!')
-    return redirect(f'/detalhes/{id}')
+    return _acao_na_tela(servicos.concluir_demanda, id, 'Demanda concluída!',
+                         f'/detalhes/{id}', usuario_atual())
 
 
 # ---------------------------------------------------------------- COMENTÁRIOS
@@ -519,225 +321,12 @@ def concluir(id):
 @app.route('/adicionar_comentario/<int:demanda_id>', methods=['POST'])
 @requer_permissao('comentar')
 def adicionar_comentario(demanda_id):
-    comentario = request.form.get('comentario', '').strip()
-    autor = f"{session['usuario']} (#{session['usuario_id']})"
-
-    if not comentario:
-        flash('O comentário não pode estar vazio!')
-        return redirect(f'/detalhes/{demanda_id}')
-
-    if len(comentario) > 1000:
-        flash('O comentário deve ter no máximo 1000 caracteres.')
-        return redirect(f'/detalhes/{demanda_id}')
-
-    conn = get_db()
-    cursor = conn.cursor()
-
-    existe = cursor.execute('SELECT id FROM demandas WHERE id=?', (demanda_id,)).fetchone()
-    if existe is None:
-        conn.close()
-        flash('Demanda não encontrada.')
-        return redirect('/')
-
-    cursor.execute(
-        "INSERT INTO comentarios (demanda_id, comentario, autor, data) VALUES (?, ?, ?, ?)",
-        (demanda_id, comentario, autor, agora())
-    )
-    registrar_log(cursor, 'CRIAR_COMENTARIO', 'comentario', cursor.lastrowid,
-                  f"demanda_id={demanda_id}; comentario='{comentario}'")
-    conn.commit()
-    conn.close()
-
-    return redirect(f'/detalhes/{demanda_id}')
+    return _acao_na_tela(servicos.adicionar_comentario, demanda_id, None,
+                         f'/detalhes/{demanda_id}', usuario_atual(),
+                         request.form.get('comentario', ''))
 
 
 # ---------------------------------------------------------------- DASHBOARD
-
-def _data_valida(texto):
-    try:
-        datetime.strptime(texto, '%Y-%m-%d')
-        return texto
-    except ValueError:
-        return ''
-
-
-def ler_filtros_dashboard(args):
-    """Lê e valida os filtros da URL (valores inválidos são ignorados)."""
-    responsavel = args.get('responsavel', '').strip()
-    if responsavel != 'sem' and not responsavel.isdigit():
-        responsavel = ''
-    prioridade = args.get('prioridade', '')
-    status = args.get('status', '')
-    return {
-        'data_inicio': _data_valida(args.get('data_inicio', '').strip()),
-        'data_fim': _data_valida(args.get('data_fim', '').strip()),
-        'responsavel': responsavel,
-        'prioridade': prioridade if prioridade in PRIORIDADES else '',
-        'status': status if status in STATUS_EXIBIDOS else '',
-        'visao': 'criticas_atrasadas' if args.get('visao') == 'criticas_atrasadas' else '',
-    }
-
-
-def montar_condicao(f):
-    """Monta o WHERE (sobre BASE_DEMANDAS) combinando todos os filtros."""
-    condicoes, parametros = ['1=1'], []
-    if f['data_inicio']:
-        condicoes.append('date(data_criacao) >= ?')
-        parametros.append(f['data_inicio'])
-    if f['data_fim']:
-        condicoes.append('date(data_criacao) <= ?')
-        parametros.append(f['data_fim'])
-    if f['responsavel'] == 'sem':
-        condicoes.append('responsavel_id IS NULL')
-    elif f['responsavel']:
-        condicoes.append('responsavel_id = ?')
-        parametros.append(int(f['responsavel']))
-    if f['prioridade']:
-        condicoes.append('prioridade = ?')
-        parametros.append(f['prioridade'])
-    if f['status']:
-        condicoes.append('status_exibido = ?')
-        parametros.append(f['status'])
-    if f['visao'] == 'criticas_atrasadas':
-        condicoes.append("prioridade = ? AND status_exibido = 'Atrasado'")
-        parametros.append(PRIORIDADE_CRITICA)
-    return ' AND '.join(condicoes), parametros
-
-
-def _data_br(texto):
-    return datetime.strptime(texto, '%Y-%m-%d').strftime('%d/%m/%Y')
-
-
-def descrever_filtros(conn, f):
-    """Texto dos filtros aplicados (usado no rodapé dos relatórios)."""
-    partes = []
-    if f['data_inicio'] and f['data_fim']:
-        partes.append(f"Período {_data_br(f['data_inicio'])} a {_data_br(f['data_fim'])}")
-    elif f['data_inicio']:
-        partes.append(f"A partir de {_data_br(f['data_inicio'])}")
-    elif f['data_fim']:
-        partes.append(f"Até {_data_br(f['data_fim'])}")
-    if f['responsavel'] == 'sem':
-        partes.append('Sem responsável')
-    elif f['responsavel']:
-        linha = conn.execute('SELECT nome FROM solicitantes WHERE id=?',
-                             (int(f['responsavel']),)).fetchone()
-        partes.append(f"Responsável {linha['nome'] if linha else '#' + f['responsavel']}")
-    if f['prioridade']:
-        partes.append(f"Prioridade {f['prioridade']}")
-    if f['status']:
-        partes.append(f"Status {f['status']}")
-    if f['visao'] == 'criticas_atrasadas':
-        partes.append('Visão: críticas atrasadas')
-    return ' · '.join(partes) or 'Nenhum filtro (todas as demandas)'
-
-
-def calcular_dashboard(conn, f):
-    cond, params = montar_condicao(f)
-    base = BASE_DEMANDAS
-
-    # Totais por status (Aberto = no prazo; Atrasado = aberto com prazo vencido)
-    por_status = {s: 0 for s in STATUS_EXIBIDOS}
-    for linha in conn.execute(
-            f"SELECT status_exibido AS s, COUNT(*) AS n FROM {base} WHERE {cond} GROUP BY s", params):
-        por_status[linha['s']] = linha['n']
-    total = sum(por_status.values())
-
-    def pct(n):
-        return round(n * 100 / total, 1) if total else 0
-
-    # Por prioridade
-    por_prioridade = {p: 0 for p in PRIORIDADES}
-    for linha in conn.execute(
-            f"SELECT prioridade AS p, COUNT(*) AS n FROM {base} WHERE {cond} GROUP BY p", params):
-        por_prioridade[linha['p']] = linha['n']
-
-    # Críticas: quantas, quem são e status atual (atrasadas primeiro)
-    criticas = [dict(r) for r in conn.execute(
-        f"SELECT id, titulo, solicitante, responsavel, prazo, status_exibido "
-        f"FROM {base} WHERE {cond} AND prioridade = ? "
-        f"ORDER BY (status_exibido = 'Atrasado') DESC, prazo ASC",
-        params + [PRIORIDADE_CRITICA])]
-    criticas_atrasadas = [c for c in criticas if c['status_exibido'] == 'Atrasado']
-
-    # Demandas em aberto (no prazo + atrasadas) por responsável
-    por_responsavel = [dict(r) for r in conn.execute(
-        f"SELECT COALESCE(responsavel, 'Sem responsável') AS nome, "
-        f"       (responsavel_id IS NULL) AS sem_responsavel, "
-        f"       COUNT(*) AS abertas, "
-        f"       SUM(CASE WHEN status_exibido = 'Atrasado' THEN 1 ELSE 0 END) AS atrasadas "
-        f"FROM {base} WHERE {cond} AND status_exibido IN ('Aberto', 'Atrasado') "
-        f"GROUP BY responsavel_id, nome ORDER BY abertas DESC, nome", params)]
-    sem_responsavel = sum(r['abertas'] for r in por_responsavel if r['sem_responsavel'])
-
-    # Tempo médio de resolução (dias): só concluídas COM responsável; canceladas
-    # e demandas sem responsável ficam fora (fora do SLA); críticas têm peso maior.
-    concluidas = conn.execute(
-        f"SELECT prioridade, julianday(data_conclusao) - julianday(data_criacao) AS dias "
-        f"FROM {base} WHERE {cond} AND status = 'Concluído' "
-        f"AND responsavel_id IS NOT NULL AND data_conclusao IS NOT NULL", params).fetchall()
-    soma_pesos = soma_ponderada = soma_simples = 0
-    for linha in concluidas:
-        dias = max(linha['dias'] or 0, 0)
-        peso = PESO_CRITICA if linha['prioridade'] == PRIORIDADE_CRITICA else 1
-        soma_pesos += peso
-        soma_ponderada += dias * peso
-        soma_simples += dias
-    fora_sla = conn.execute(
-        f"SELECT COUNT(*) FROM {base} WHERE {cond} AND status = 'Concluído' "
-        f"AND responsavel_id IS NULL", params).fetchone()[0]
-    tempo_medio = {
-        'dias': round(soma_ponderada / soma_pesos, 1) if soma_pesos else None,
-        'dias_simples': round(soma_simples / len(concluidas), 1) if concluidas else None,
-        'consideradas': len(concluidas),
-        'fora_sla': fora_sla,
-        'peso_critica': PESO_CRITICA,
-    }
-
-    # Evolução temporal: criadas x concluídas (por dia se o período for curto, senão por mês)
-    formato = '%Y-%m'
-    if f['data_inicio'] and f['data_fim']:
-        dias_periodo = (datetime.strptime(f['data_fim'], '%Y-%m-%d')
-                        - datetime.strptime(f['data_inicio'], '%Y-%m-%d')).days
-        if dias_periodo <= 62:
-            formato = '%Y-%m-%d'
-    criadas = {r['p']: r['n'] for r in conn.execute(
-        f"SELECT strftime('{formato}', data_criacao) AS p, COUNT(*) AS n "
-        f"FROM {base} WHERE {cond} GROUP BY p", params)}
-    fechadas = {r['p']: r['n'] for r in conn.execute(
-        f"SELECT strftime('{formato}', data_conclusao) AS p, COUNT(*) AS n "
-        f"FROM {base} WHERE {cond} AND status = 'Concluído' AND data_conclusao IS NOT NULL "
-        f"GROUP BY p", params)}
-    periodos = sorted(set(criadas) | set(fechadas))
-    evolucao = {
-        'labels': periodos,
-        'criadas': [criadas.get(p, 0) for p in periodos],
-        'concluidas': [fechadas.get(p, 0) for p in periodos],
-    }
-
-    return {
-        'total': total,
-        'status': {s: {'n': n, 'pct': pct(n)} for s, n in por_status.items()},
-        'prioridade': por_prioridade,
-        'criticas': criticas,
-        'criticas_atrasadas': criticas_atrasadas,
-        'por_responsavel': por_responsavel,
-        'sem_responsavel': sem_responsavel,
-        'tempo_medio': tempo_medio,
-        'evolucao': evolucao,
-        'filtros_texto': descrever_filtros(conn, f),
-    }
-
-
-def linhas_relatorio(conn, f):
-    cond, params = montar_condicao(f)
-    return conn.execute(
-        f"SELECT id, titulo, solicitante, prioridade, prazo, status_exibido, "
-        f"       COALESCE(responsavel, 'Sem responsável') AS responsavel, "
-        f"       data_criacao, data_conclusao "
-        f"FROM {BASE_DEMANDAS} WHERE {cond} ORDER BY {ORDENACOES['prioridade']}", params
-    ).fetchall()
-
 
 def _seguro_csv(valor):
     """Evita que o Excel execute fórmulas vindas de texto digitado por usuários."""
